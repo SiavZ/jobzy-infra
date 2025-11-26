@@ -22,6 +22,33 @@ Complete Infrastructure-as-Code for Jobzy's microservices on Google Cloud Platfo
    ./terraform/scripts/apply.sh prod
    ```
 
+## 🔐 Authentication (No Service Account Keys!)
+
+This repository uses **Workload Identity Federation (WIF)** for secure, keyless authentication:
+
+- ✅ No `terraform-key.json` files
+- ✅ Automatic token rotation
+- ✅ Full GCP audit logging
+- ✅ GitHub Actions native integration
+
+### Local Development
+
+```bash
+gcloud auth application-default login
+cd terraform
+terraform plan -var-file="environments/dev.tfvars"
+```
+
+### CI/CD (GitHub Actions)
+
+See [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) for setup instructions.
+
+### WIF Configuration
+
+See [WIF-CONFIG.md](WIF-CONFIG.md) for detailed configuration reference.
+
+---
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
