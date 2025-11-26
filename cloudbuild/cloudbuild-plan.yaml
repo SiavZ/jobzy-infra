@@ -1,0 +1,56 @@
+steps:
+  # Step 1: Terraform Init
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-init'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform init
+
+  # Step 2: Terraform Validate
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-validate'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform validate
+
+  # Step 3: Terraform Format Check
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-fmt'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform fmt -check -recursive
+
+  # Step 4: Terraform Plan
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-plan'
+    entrypoint: 'bash'
+    env:
+      - 'TF_VAR_keycloak_admin_password=${_KEYCLOAK_ADMIN_PASSWORD}'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform plan \
+          -var-file="environments/${_ENVIRONMENT}.tfvars" \
+          -out=tfplan
+
+        echo "Plan completed successfully"
+        echo "To apply this plan, trigger the main cloudbuild.yaml on the main branch"
+
+timeout: '1800s'
+
+substitutions:
+  _ENVIRONMENT: 'dev'
+  _KEYCLOAK_ADMIN_PASSWORD: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY

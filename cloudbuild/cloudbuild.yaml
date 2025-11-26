@@ -1,0 +1,72 @@
+steps:
+  # Step 1: Terraform Init
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-init'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform init
+
+  # Step 2: Terraform Validate
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-validate'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform validate
+
+  # Step 3: Terraform Format Check
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-fmt'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform fmt -check
+
+  # Step 4: Terraform Plan
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-plan'
+    entrypoint: 'bash'
+    env:
+      - 'TF_VAR_keycloak_admin_password=${_KEYCLOAK_ADMIN_PASSWORD}'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform plan \
+          -var-file="environments/${_ENVIRONMENT}.tfvars" \
+          -out=tfplan
+
+  # Step 5: Terraform Apply (only on main branch)
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-apply'
+    entrypoint: 'bash'
+    env:
+      - 'TF_VAR_keycloak_admin_password=${_KEYCLOAK_ADMIN_PASSWORD}'
+    args:
+      - '-c'
+      - |
+        if [ "$BRANCH_NAME" = "main" ]; then
+          cd terraform
+          terraform apply -auto-approve tfplan
+        else
+          echo "Skipping apply on non-main branch"
+        fi
+
+timeout: '3600s'
+
+substitutions:
+  _ENVIRONMENT: 'prod'
+  _KEYCLOAK_ADMIN_PASSWORD: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+onPush:
+  branch: '^main$'

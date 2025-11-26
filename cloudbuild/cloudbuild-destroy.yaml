@@ -1,0 +1,68 @@
+steps:
+  # Step 1: Terraform Init
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-init'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform init
+
+  # Step 2: Terraform Plan Destroy
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-plan-destroy'
+    entrypoint: 'bash'
+    env:
+      - 'TF_VAR_keycloak_admin_password=${_KEYCLOAK_ADMIN_PASSWORD}'
+    args:
+      - '-c'
+      - |
+        cd terraform
+        terraform plan -destroy \
+          -var-file="environments/${_ENVIRONMENT}.tfvars" \
+          -out=tfplan-destroy
+
+  # Step 3: Manual Approval Required
+  - name: 'bash'
+    id: 'approval-warning'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "========================================="
+        echo "WARNING: DESTROY OPERATION"
+        echo "========================================="
+        echo "This will destroy all infrastructure!"
+        echo "Environment: ${_ENVIRONMENT}"
+        echo ""
+        echo "To proceed, you must manually approve this build."
+        echo "========================================="
+
+  # Step 4: Terraform Destroy (requires manual trigger)
+  - name: 'hashicorp/terraform:latest'
+    id: 'terraform-destroy'
+    entrypoint: 'bash'
+    env:
+      - 'TF_VAR_keycloak_admin_password=${_KEYCLOAK_ADMIN_PASSWORD}'
+    args:
+      - '-c'
+      - |
+        if [ "${_MANUAL_APPROVAL}" = "approved" ]; then
+          cd terraform
+          terraform apply -auto-approve tfplan-destroy
+          echo "Infrastructure destroyed successfully"
+        else
+          echo "Manual approval not provided. Skipping destroy."
+          exit 1
+        fi
+
+timeout: '3600s'
+
+substitutions:
+  _ENVIRONMENT: 'dev'
+  _KEYCLOAK_ADMIN_PASSWORD: ''
+  _MANUAL_APPROVAL: 'not-approved'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
