@@ -1,0 +1,938 @@
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         JOBZY PLATFORM - NETWORK MAP                        ║
+║                    GCP + Self-Hosted Kubernetes Hybrid                      ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+
+                              INTERNET / USERS
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                    ▼               ▼               ▼
+            ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+            │  Web Browser │  │ Mobile App   │  │ Admin Panel  │
+            │  (Customers) │  │  (Providers) │  │  (Dashboard) │
+            └──────────────┘  └──────────────┘  └──────────────┘
+                    │               │               │
+                    └───────────────┼───────────────┘
+                                    │
+                                    ▼
+                    ╔════════════════════════════════╗
+                    ║   CLOUDFLARE / DNS ROUTING     ║
+                    ║   jobzy.fi → Cloud Run         ║
+                    ║   api.jobzy.fi → Kong          ║
+                    ║   auth.jobzy.fi → Keycloak     ║
+                    ╚════════════════════════════════╝
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+          ┌─────────▼────────┐  ┌───▼────────┐  ┌──▼──────────┐
+          │  Google Cloud    │  │ Self-Hosted│  │  Analytics  │
+          │     (GCP)        │  │   Servers  │  │   Services  │
+          │  europe-north1   │  │ (Finland)  │  │   (GA4)     │
+          └──────────────────┘  └────────────┘  └─────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         GOOGLE CLOUD PLATFORM (GCP)                         ║
+║                           europe-north1 (Finland)                           ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                      CLOUD RUN (Container Platform)                  │
+    │                                                                      │
+    │    ┌────────────────────────────────────────────────────────────┐    │
+    │    │  Service: jobzy-frontend                                   │    │
+    │    ├────────────────────────────────────────────────────────────┤    │
+    │    │  • Next.js PWA (React 18, TailwindCSS)                     │    │
+    │    │  • Auto-scaling: 0-10 instances                            │    │
+    │    │  • Memory: 1 GB per instance                               │    │
+    │    │  • CPU: 1 vCPU per instance                                │    │
+    │    │  • Endpoints:                                              │    │
+    │    │    └─ https://jobzy.fi (PRIMARY)                           │    │
+    │    │    └─ https://www.jobzy.fi (ALIAS)                         │    │
+    │    │  • Environment: Production (auto-deploy from GitHub)       │    │
+    │    │  • CDN: Cloud CDN (auto-caching)                           │    │
+    │    │  • SSL: Managed certificate (automatic renewal)            │    │
+    │    └────────────────────────────────────────────────────────────┘    │
+    │                                                                      │
+    │                            ▼  (HTTPS)                                │
+    │                                                                      │
+    │    ┌────────────────────────────────────────────────────────────┐    │
+    │    │  Cloud Load Balancer                                       │    │
+    │    │  • HTTPS termination (SSL/TLS)                             │    │
+    │    │  • Backend: Cloud Run (auto-scaled)                        │    │
+    │    │  • Health checks: Every 10 seconds                         │    │
+    │    │  • Timeout: 60 seconds (adjustable)                        │    │
+    │    └────────────────────────────────────────────────────────────┘    │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+         ┌──────────────────────┐  ┌──────────────────────┐
+         │  GKE KUBERNETES      │  │  MANAGED SERVICES    │
+         │  CLUSTER             │  │  (Fully Managed)     │
+         │  3 nodes             │  │                      │
+         │  n1-standard-4       │  │  • Cloud SQL (11 DBs)│
+         │  16 GB RAM / node    │  │  • Memorystore       │
+         │  100 GB SSD / node   │  │  • Cloud Storage     │
+         └──────────────────────┘  └──────────────────────┘
+                 │
+      ┌──────────┼──────────┐
+      │          │          │
+      ▼          ▼          ▼
+
+   ┌─────────┐ ┌──────────┐ ┌───────────┐
+   │  Kong   │ │ Keycloak │ │ All Other │
+   │ Gateway │ │  (Auth)  │ │ Services  │
+   │ (1-3)   │ │ (2 pods) │ │ (Helm)    │
+   └─────────┘ └──────────┘ └───────────┘
+       │           │            │
+       │           │            └─────────────────────────┐
+       │           │                                      │
+       ▼           ▼          ┌─────────────────────┐     ▼
+    ┌──────────────────────┐  │  HELM DEPLOYMENTS   │  ┌──────────────┐
+    │  REQUEST FLOW        │  ├─────────────────────┤  │ MICROSERVICES│
+    │  ────────────────    │  │ • Redis (in-memory) │  │              │
+    │                      │  │ • Elasticsearch     │  │ • Booking ⭐ │
+    │  1. Client req       │  │ • Prometheus        │  │ • Pricing ⭐ │
+    │  2. Kong routes      │  │ • Grafana           │  │ • Payment ⭐ │
+    │  3. Auth (JWT)       │  │ • Jaeger            │  │ • Correlation⭐
+    │  4. Service API      │  │ • RabbitMQ+Celery   │  │ • Others     │
+    │  5. Database Query   │  │ • Linkerd mesh      │  └──────────────┘
+    │  6. Response         │  │ • Istio (future)    │
+    │                      │  └─────────────────────┘
+    │  All via mTLS        │
+    │  encryption (Linkerd)│
+    └──────────────────────┘
+
+
+    ┌────────────────────────────────────────────────────────────────────┐
+    │                    CLOUD SQL (Managed Databases)                   │
+    │                    (Deployed in GCP with Private IP)               │
+    │                                                                    │
+    │  MySQL Instances (6):                PostgreSQL Instances (5):     │
+    │  ├─ Booking: 100 GB (4 cores)       ├─ Keycloak: 5 GB (2 cores)    │
+    │  ├─ Easy Appts: 500 GB (16 cores)   ├─ Chatwoot: 200 GB (4)        │
+    │  ├─ SuiteCRM: 300 GB (8 cores)      ├─ Astuto: 150 GB (4 cores)    │
+    │  ├─ Payment: 400 GB (12 cores)      ├─ Novu: 100 GB (2 cores)      │
+    │  ├─ Pricing MVP: 20 GB (2 cores)    ├─ Strapi: 50 GB (2 cores)     │ 
+    │  └─ Correlation: 50 GB (2 cores)    └─ Kong Config: 2 GB (4)       │
+    │                                                                    │
+    │  Features (All):                                                   │
+    │  • Private IP (VPC only, no public internet)                       │
+    │  • Automated backups (hourly incremental)                          │
+    │  • Point-in-time recovery (up to 7 days)                           │
+    │  • High Availability (regional failover)                           │
+    │  • Encryption at rest (automatic)                                  │
+    │  • Encryption in transit (SSL/TLS)                                 │
+    │  • Daily snapshots (7-day retention)                               │
+    │  • Read replicas: 10 total (distributed)                           │
+    │  • Connection pooling: Cloud SQL Proxy                             │
+    │                                                                    │
+    │  TOTAL: 1,877 GB persistent data | 62 CPU cores | 244 GB RAM       │
+    └────────────────────────────────────────────────────────────────────┘
+
+    ┌────────────────────────────────────────────────────────────────────┐
+    │                    MEMORYSTORE (Managed Redis)                     │
+    │                                                                    │
+    │  Redis Cluster:                                                    │
+    │  ├─ Size: 64 GB HA cluster (3 nodes, sharded)                      │
+    │  ├─ Location: europe-north1 (Finland)                              │
+    │  ├─ Private IP: VPC only (no public access)                        │
+    │  ├─ Failover: Automatic (sub-second)                               │
+    │  ├─ Persistence: RDB + AOF snapshots                               │
+    │  │                                                                 │
+    │  ├─ Used By:                                                       │
+    │  │  ├─ Session cache (all services) - TTL: 24h                     │
+    │  │  ├─ Pricing cache - TTL: 24h (invalidate on config change)      │
+    │  │  ├─ Celery message broker (async jobs)                          │
+    │  │  ├─ Rate limiting counters - TTL: 1m                            │
+    │  │  └─ Real-time data streams & Pub/Sub                            │
+    │  │                                                                 │
+    │  └─ Monitoring: Via Cloud Monitoring (auto-alerts)                 │
+    └────────────────────────────────────────────────────────────────────┘
+
+    ┌────────────────────────────────────────────────────────────────────┐
+    │                   CLOUD STORAGE (GCS) - Object Storage             │
+    │                                                                    │
+    │  Buckets (Auto-scaling, Global CDN-backed):                        │
+    │  ├─ jobzy-dev-storage (dev environment)                            │
+    │  │   └─ ~100 MB (staging files, test data)                         │
+    │  ├─ jobzy-staging-storage (staging)                                │
+    │  │   └─ ~500 MB (backup copies, test uploads)                      │
+    │  └─ jobzy-prod-storage (production)                                │
+    │      └─ ~1-5 TB (scales automatically)                             │
+    │                                                                    │
+    │  Contents:                                                         │
+    │  • Provider profile pictures                                       │
+    │  • Service category photos                                         │
+    │  • Invoice PDFs                                                    │
+    │  • Receipt documents                                               │
+    │  • Proof of work images                                            │
+    │  • Customer documents                                              │
+    │  • Backup archives                                                 │
+    │  • Contract files                                                  │
+    │  • Audio/video content                                             │
+    │                                                                    │
+    │  Features:                                                         │
+    │  • Versioning enabled (auto backups)                               │
+    │  • Encryption at rest (automatic)                                  │
+    │  • Lifecycle policies (auto-archive after 90 days)                 │
+    │  • CDN integration (global fast delivery)                          │
+    │  • CORS configured for frontend access                             │
+    │  • Signed URLs for temporary access                                │
+    │  • Retention: 7-year legal compliance                              │
+    └────────────────────────────────────────────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         SELF-HOSTED KUBERNETES                              ║
+║                      (Finland Data Center / VPS)                            ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                       GKE KUBERNETES CLUSTER                         │
+    │                      (3-node production setup)                       │
+    │                                                                      │
+    │  Nodes:                                                              │
+    │  ├─ Node 1: n1-standard-4 (4 vCPU, 16 GB RAM, 100 GB SSD)            │
+    │  ├─ Node 2: n1-standard-4 (4 vCPU, 16 GB RAM, 100 GB SSD)            │
+    │  └─ Node 3: n1-standard-4 (4 vCPU, 16 GB RAM, 100 GB SSD)            │
+    │                                                                      │
+    │  TOTAL: 12 vCPU | 48 GB RAM | 300 GB SSD                             │
+    │  Location: europe-north1 (Finland)                                   │
+    │  Networking: VPC with private subnets                                │
+    │  Load Balancer: Google Cloud Load Balancer                           │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+                                    │
+         ┌──────────────────────────┼──────────────────────────┐
+         │                          │                          │
+         ▼                          ▼                          ▼
+
+    ┌─────────────────┐    ┌──────────────────┐    ┌───────────────────┐
+    │   KONG GATEWAY  │    │  KEYCLOAK AUTH   │    │  OBSERVABILITY    │
+    │   (API Router)  │    │  (OIDC/OAuth2)   │    │  & INFRASTRUCTURE │
+    │                 │    │                  │    │                   │
+    │ Pods: 2-3       │    │ Pods: 2 (HA)     │    │ • ELK Stack       │
+    │ Memory: 2GB     │    │ Memory: 4GB each │    │ • Prometheus      │
+    │ CPU: 2 cores    │    │ CPU: 2 cores     │    │ • Grafana         │
+    │                 │    │                  │    │ • Jaeger          │
+    │ Features:       │    │ Features:        │    │ • Linkerd         │
+    │ • 600+ routes   │    │ • JWT tokens     │    │ • RabbitMQ        │
+    │ • Rate limit    │    │ • Magic links    │    │ • Elasticsearch   │
+    │ • mTLS via      │    │ • Social OAuth   │    │                   │
+    │   Linkerd       │    │ • SMS via Twilio │    │ Pods: 15+         │
+    │ • Load balance  │    │ • Sessions (Redis)    │ Memory: 16 GB     │
+    │ • Plugin system │    │ • LDAP support   │    │ CPU: 8 cores      │
+    │                 │    │                  │    │                   │
+    │ EXTERNAL ROUTES │    │ EXTERNAL ROUTES  │    │ INTERNAL ONLY     │
+    │ • api.jobzy.fi  │    │ • auth.jobzy.fi  │    │ • Cluster IP      │
+    │   (All services)│    │   (Auth requests)│    │   only            │
+    │                 │    │                  │    │                   │
+    └─────────────────┘    └──────────────────┘    └───────────────────┘
+            │                      │                        │
+            │                      │                        │
+            │          ┌───────────┴───────────┐            │
+            │          │                       │            │
+            ▼          ▼                       ▼            │
+        ┌────────────────────────────────────────────┐      │
+        │     CORE MICROSERVICES                     │      │
+        │     (All connected via service mesh)       │      │
+        ├────────────────────────────────────────────┤      │
+        │                                            │      │
+        │  ⭐ CUSTOM SERVICES (YOU MAINTAIN)         │      │
+        │  ├─ Booking Service (Job workflow)         │      │
+        │  │  └─ Pods: 2 | Memory: 2GB | CPU: 1      │      │
+        │  ├─ Payment Service (Stripe integration)   │      │
+        │  │  └─ Pods: 3 | Memory: 3GB | CPU: 1      │      │
+        │  ├─ Pricing Service MVP (Rate calc)        │     │
+        │  │  └─ Pods: 1 | Memory: 1GB | CPU: 0.5    │     │
+        │  └─ Correlation DB (ID mapping)            │     │
+        │     └─ Pods: 1 | Memory: 1GB | CPU: 0.5    │     │
+        │                                            │     │
+        │  PRE-BUILT PLATFORMS (Community)           │     │
+        │  ├─ EasyAppointments (Calendar)            │     │
+        │  │  └─ Pods: 2 | Memory: 2GB | CPU: 1      │     │
+        │  ├─ SuiteCRM (CRM)                         │     │
+        │  │  └─ Pods: 2 | Memory: 2GB | CPU: 1      │     │
+        │  ├─ Chatwoot (Support chat)                │     │
+        │  │  └─ Pods: 2 | Memory: 2GB | CPU: 1      │     │
+        │  ├─ Astuto (Reviews)                       │     │
+        │  │  └─ Pods: 1 | Memory: 1GB | CPU: 0.5    │     │
+        │  ├─ Strapi (CMS)                           │     │
+        │  │  └─ Pods: 1 | Memory: 1GB | CPU: 0.5    │     │
+        │  ├─ Novu (Notifications)                   │     │
+        │  │  └─ Pods: 1 | Memory: 1GB | CPU: 0.5    │     │
+        │  └─ Linkerd (Service mesh)                 │     │
+        │     └─ System pods (auto-managed)          │     │
+        │                                            │     │
+        │  INFRASTRUCTURE (OSS)                      │     │
+        │  ├─ Redis (Memorystore - external)         │     │
+        │  ├─ Elasticsearch (3-node cluster)         │     │
+        │  ├─ Prometheus (metrics)                   │     │
+        │  ├─ Grafana (dashboards)                   │     │
+        │  ├─ Jaeger (distributed tracing)           │     │
+        │  └─ RabbitMQ + Celery (job queue)          │     │
+        │                                            │     │
+        │  TOTAL PODS: 20-25                         │     │
+        │  TOTAL MEMORY: ~28 GB allocated            │     │
+        │  TOTAL CPU: ~12 vCPU allocated             │     │
+        │                                            │     │
+        └────────────────────────────────────────────┘     │
+                    │                                       │
+                    │                                       │
+            ┌───────┴────────────────────────────────┐     │
+            │                                        │     │
+            ▼                                        ▼     │
+        ┌──────────────────┐              ┌──────────────────┐
+        │  SERVICE MESH    │              │  OBSERVABILITY   │
+        │  (Linkerd mTLS)  │◄────────────►│  INTEGRATION     │
+        ├──────────────────┤              ├──────────────────┤
+        │ • Auto mTLS      │              │ • Metrics export │
+        │ • Certificate mgmt              │ • Trace collector│
+        │ • Traffic split  │              │ • Log forwarding │
+        │ • Failover       │              │ • Health checks  │
+        │ • Retries        │              │ • Dashboards     │
+        │ • Circuit break  │              │ • Alerting       │
+        │ • Load balance   │              │                  │
+        │ • Rate limiting  │              │ Prometheus       │
+        │                  │              │   scrapes every  │
+        │ All service ↔    │              │   15 seconds     │
+        │ service traffic  │              │                  │
+        │ encrypted        │              │ Logs shipped to  │
+        │ automatically    │              │   Elasticsearch  │
+        │                  │              │                  │
+        └──────────────────┘              └──────────────────┘
+                    │                            ▲
+                    └────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         SELF-HOSTED SERVERS (OPTIONAL)                      ║
+║                      (If using self-hosted K8s instead)                     ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    Alternative: Deploy on self-hosted servers instead of GKE
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                   SELF-HOSTED KUBERNETES CLUSTER                     │
+    │                        (3 Master Nodes)                              │
+    │                    (E.g., Hetzner Cloud VPS)                         │
+    │                                                                      │
+    │  Master Node 1: CPX51                                                │
+    │  ├─ 16 vCPU (Ampere)                                                 │
+    │  ├─ 32 GB RAM                                                        │
+    │  ├─ 160 GB NVMe SSD                                                  │
+    │  ├─ Location: Nuremberg, Germany (EU)                                │
+    │  └─ Role: Control plane + etcd + worker                              │
+    │                                                                      │
+    │  Master Node 2: CPX51                                                │
+    │  ├─ 16 vCPU (Ampere)                                                 │
+    │  ├─ 32 GB RAM                                                        │
+    │  ├─ 160 GB NVMe SSD                                                  │
+    │  ├─ Location: Helsinki, Finland (PREFERRED)                          │
+    │  └─ Role: Control plane + etcd + worker                              │
+    │                                                                      │
+    │  Worker Node: CPX31                                                  │
+    │  ├─ 8 vCPU (Ampere)                                                  │
+    │  ├─ 16 GB RAM                                                        │
+    │  ├─ 80 GB NVMe SSD                                                   │
+    │  ├─ Location: Helsinki, Finland (PREFERRED)                          │
+    │  └─ Role: Worker only (applications)                                 │
+    │                                                                      │
+    │  TOTAL: 40 vCPU | 80 GB RAM | 400 GB SSD                             │
+    │  Monthly cost: ~€150-200                                             │
+    │                                                                      │
+    │  Setup:                                                              │
+    │  • kubeadm for cluster creation                                      │
+    │  • Cilium for networking + eBPF                                      │
+    │  • Ceph or Longhorn for persistent volumes                           │
+    │  • MetalLB for bare-metal load balancing                             │
+    │  • Cert-manager for SSL certificates                                 │
+    │  • ArgoCD for GitOps deployments                                     │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         EXTERNAL SERVICES (SaaS)                            ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                        STRIPE (Payment Gateway)                      │
+    │                                                                      │
+    │  Integration Points:                                                 │
+    │  • Custom Payment Service → Stripe API                               │
+    │  • Webhook: Stripe → Booking Service (payment confirmations)         │
+    │  • PCI Compliance: Level 1 (Stripe handles)                          │
+    │  • Regional: EU (compliant with GDPR)                                │
+    │                                                                      │
+    │  Features Used:                                                      │
+    │  ├─ Card payments (Stripe.js)                                        │
+    │  ├─ Payment intents (idempotency)                                    │
+    │  ├─ Webhooks (payment.success, payment.failed)                       │
+    │  ├─ Refunds                                                          │
+    │  └─ Dashboard analytics                                              │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                        TWILIO (SMS Service)                          │
+    │                                                                      │
+    │  Integration Points:                                                 │
+    │  • Keycloak → Twilio API (SMS 2FA codes)                             │
+    │  • Novu → Twilio (SMS notifications)                                 │
+    │  • Regional: EU (GDPR compliant)                                     │
+    │                                                                      │
+    │  Features Used:                                                      │
+    │  ├─ SMS sending (one-time codes)                                     │
+    │  ├─ SMS verification (phone validation)                              │
+    │  ├─ Webhook callbacks (delivery status)                              │
+    │  └─ Detailed analytics (delivery rates)                              │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                 GOOGLE ANALYTICS 4 (GA4)                             │
+    │                                                                      │
+    │  Integration Points:                                                 │
+    │  • Next.js Frontend → GA4 JavaScript SDK                             │
+    │  • Tracking: User behavior, conversions, page views                  │
+    │  • Real-time dashboard                                               │
+    │                                                                      │
+    │  Features:                                                           │
+    │  ├─ Page view tracking                                               │
+    │  ├─ Event tracking (booking created, payment done)                   │
+    │  ├─ User funnels                                                     │
+    │  ├─ Conversion tracking                                              │
+    │  └─ Audience segmentation                                            │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                   MATOMO (Privacy-First Analytics)                   │
+    │                                                                      │
+    │  Deployment:                                                         │
+    │  • Option 1: Self-hosted in GKE (recommended for privacy)            │
+    │  • Option 2: Matomo Cloud (managed)                                  │
+    │                                                                      │
+    │  Features:                                                           │
+    │  ├─ Privacy-focused (no 3rd party)                                   │
+    │  ├─ GDPR compliant (no cookie consent needed)                        │
+    │  ├─ User behavior tracking                                           │
+    │  ├─ Conversion tracking                                              │
+    │  ├─ Custom dashboards                                                │
+    │  └─ Full data control                                                │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         NETWORK SECURITY & ACCESS                           ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                       FIREWALL & ROUTING                             │
+    │                                                                      │
+    │  Public Routes (Internet Accessible):                                │
+    │  ┌────────────────────────────────────────────────────────────┐      │
+    │  │ HTTPS Port 443 (TLS/SSL)                                   │      │
+    │  ├────────────────────────────────────────────────────────────┤      │
+    │  │ • jobzy.fi ──────────→ Cloud Run (Frontend)                │      │
+    │  │ • api.jobzy.fi ──────→ Kong Gateway (All APIs)             │      │
+    │  │ • auth.jobzy.fi ─────→ Keycloak (Auth endpoints)           │      │
+    │  │ • crm.jobzy.fi ──────→ SuiteCRM (Admin access)             │      │
+    │  │ • chat.jobzy.fi ─────→ Chatwoot (Support)                  │      │
+    │  │ • calendar.jobzy.fi──→ EasyAppointments (Scheduler)        │      │
+    │  │ • cms.jobzy.fi ──────→ Strapi (Content admin)              │      │
+    │  │                                                            │      │
+    │  │ All connections via:                                       │      │
+    │  │ • Cloudflare DNS (DDoS protection)                         │      │
+    │  │ • SSL/TLS certificates (auto-renewed)                      │      │
+    │  │ • WAF rules (Web Application Firewall)                     │      │
+    │  │ • Rate limiting at DNS level                               │      │
+    │  └────────────────────────────────────────────────────────────┘      │
+    │                                                                      │
+    │  Private Routes (Internal Only - VPC):                               │
+    │  ┌────────────────────────────────────────────────────────────┐      │
+    │  │ All Cloud SQL ──────────→ Private IP (No internet access)  │      │
+    │  │ All Memorystore ───────→ Private IP (No internet access)   │      │
+    │  │ All Kubernetes ────────→ Private IP (Internal only)        │      │
+    │  │ Elasticsearch ─────────→ Private IP (Cluster only)         │      │
+    │  │ RabbitMQ ──────────────→ Private IP (Cluster only)         │      │
+    │  │                                                            │      │
+    │  │ Access via:                                                │      │
+    │  │ • Workload Identity Federation (WIF - No keys!)            │      │
+    │  │ • Service accounts with IAM roles                          │      │
+    │  │ • Linkerd mTLS (automatic encryption)                      │      │
+    │  │ • Network policies (Kubernetes YAML)                       │      │
+    │  └────────────────────────────────────────────────────────────┘      │
+    │                                                                      │
+    │  Admin Access (SSH/kubectl):                                         │
+    │  ┌────────────────────────────────────────────────────────────┐      │
+    │  │ Bastion Host (Jump Server)                                 │      │
+    │  │ • IP: X.X.X.X (publicly available, rate limited)           │      │
+    │  │ • SSH Port 22 (key-based auth only)                        │      │
+    │  │ • Whitelist: Team IPs only                                 │      │
+    │  │ • 2FA: Required for all logins                             │      │
+    │  │                                                            │      │
+    │  │ Access Flow:                                               │      │
+    │  │ 1. SSH to bastion (key + 2FA)                              │      │
+    │  │ 2. kubectl from bastion (kubeconfig)                       │      │
+    │  │ 3. Cloud SQL CLI (Cloud Proxy)                             │      │
+    │  │ 4. Logs via Cloud Logging CLI                              │      │
+    │  └────────────────────────────────────────────────────────────┘      │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         DATA FLOW EXAMPLES                                  ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  EXAMPLE 1: Customer Books a Service                                │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    Client (Browser)
+         │
+         │ 1. HTTPS POST /api/bookings
+         ▼
+    Cloud Load Balancer (TLS termination)
+         │
+         │ 2. Route to Kong (api.jobzy.fi)
+         ▼
+    Kong API Gateway (Kubernetes)
+         │
+         │ 3. Validate JWT (Keycloak)
+         │ 4. Rate limit check (Redis)
+         ▼
+    Kong Routes request to:
+         │
+         │ 4. Booking Service (custom ⭐)
+         ▼
+    Booking Service Pod (Kubernetes)
+         │
+         ├─ 5. Query pricing (Redis cached)
+         │ └─ If miss: Pricing Service → MySQL
+         │
+         ├─ 6. Validate with Calendar (EasyAppointments)
+         │ └─ MySQL query
+         │
+         ├─ 7. Run matching algorithm
+         │ └─ Find best providers (algorithm)
+         │
+         ├─ 8. Create booking record
+         │ └─ INSERT into MySQL (Booking DB)
+         │
+         ├─ 9. Log event
+         │ └─ Correlation DB (audit trail)
+         │
+         └─ 10. Return response
+             └─ 200 OK with booking_id
+
+    Async Processing (Celery Queue):
+         │
+         ├─ Notification job:
+         │  └─ Novu → SMS/Email via Twilio/SendGrid
+         │
+         ├─ CRM sync job:
+         │  └─ Update SuiteCRM with booking details
+         │
+         └─ Analytics job:
+         │  └─ Send event to Matomo/GA4
+
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  EXAMPLE 2: Provider Accepts Booking & Makes Payment                │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    Provider (Browser)
+         │
+         │ 1. Click "Accept Booking"
+         ▼
+    Frontend (Cloud Run)
+         │
+         │ 2. Initiate Stripe payment flow
+         ▼
+    Client-side Stripe.js
+         │
+         │ 3. Enter card details (tokenized by Stripe)
+         ▼
+    Stripe API
+         │
+         │ 4. Charge card (EU GDPR compliant)
+         ▼
+    Payment Confirmation
+         │
+         ├─ 5. Webhook: POST /api/webhooks/stripe
+         │  └─ Hits Kong → Payment Service
+         │
+         ▼
+    Payment Service (custom ⭐)
+         │
+         ├─ 6. Verify webhook signature
+         ├─ 7. Check idempotency (Redis)
+         ├─ 8. Update booking status to "CONFIRMED"
+         ├─ 9. Generate invoice (PDF → GCS)
+         ├─ 10. Record transaction (MySQL)
+         ├─ 11. Send receipt (Novu → Twilio/Email)
+         ├─ 12. Update SuiteCRM
+         └─ 13. Log to Elasticsearch
+
+    Analytics & Reporting:
+         │
+         └─ Revenue calculation → Celery → Matomo/GA4
+
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  EXAMPLE 3: Monitoring & Alerting (24/7 Operations)                 │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    All Services (Continuous):
+         │
+         ├─ Prometheus scrapes every 15 seconds
+         │  └─ Metrics endpoint: :9090/metrics
+         │
+         ├─ ELK Stack collects logs
+         │  └─ stdout/stderr → Elasticsearch
+         │
+         ├─ Jaeger traces distributed calls
+         │  └─ Trace ID propagated through all services
+         │
+         └─ Linkerd monitors mTLS
+             └─ Certificate rotation (auto)
+
+    Grafana Dashboards (Real-time):
+         │
+         ├─ Service metrics (response time, error rate)
+         ├─ Database performance (query latency)
+         ├─ Payment throughput
+         ├─ Queue depth (pending jobs)
+         └─ Infrastructure health (CPU, memory)
+
+    Alert Conditions:
+         │
+         ├─ CPU > 70% → Auto-scale pods
+         ├─ Error rate > 5% → Slack notification
+         ├─ Queue depth > 1000 → Page DevOps
+         ├─ Payment latency > 100ms → Investigate
+         └─ Database replication lag > 5s → Alert
+
+    Incident Response:
+         │
+         ├─ 1. Alert fires → Slack → PagerDuty
+         ├─ 2. On-call engineer notified
+         ├─ 3. Access via bastion (SSH + 2FA)
+         ├─ 4. kubectl inspect pod logs
+         ├─ 5. Check Elasticsearch for errors
+         ├─ 6. Review Jaeger trace
+         ├─ 7. Scale or restart if needed
+         └─ 8. Post-mortem in Slack
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         DEPLOYMENT ARCHITECTURE                             ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                    CI/CD PIPELINE (GitOps)                           │
+    │                    GitHub Actions + ArgoCD                           │
+    │                                                                      │
+    │  Development Workflow:                                               │
+    │  ┌────────────────────────────────────────────────────────────┐      │
+    │  │                                                            │      │
+    │  │  1. Push code to GitHub (feature branch)                   │      │
+    │  │     └─ Trigger: git push                                   │      │
+    │  │                                                            │      │
+    │  │  2. GitHub Actions runs tests                              │      │
+    │  │     ├─ Unit tests                                          │      │
+    │  │     ├─ Integration tests                                   │      │
+    │  │     ├─ Linting & code quality                              │      │
+    │  │     └─ Build Docker image                                  │      │
+    │  │                                                            │      │
+    │  │  3. Push Docker image to Artifact Registry                 │      │
+    │  │     └─ Image: us-central1-docker.pkg.dev/jobzy/...         │      │
+    │  │                                                            │      │
+    │  │  4. Open Pull Request                                      │      │
+    │  │     └─ Code review & approval required                     │      │
+    │  │                                                            │      │
+    │  │  5. Merge to main branch                                   │      │
+    │  │     └─ Deploy to production                                │      │
+    │  │                                                            │      │
+    │  │  6. ArgoCD watches GitHub                                  │      │
+    │  │     └─ Detects changes in Helm values                      │      │
+    │  │                                                            │      │
+    │  │  7. Auto-deploy to Kubernetes                              │      │
+    │  │     ├─ Rolling update (0 downtime)                         │      │
+    │  │     ├─ Health checks                                       │      │
+    │  │     └─ Automatic rollback on failure                       │      │
+    │  │                                                            │      │
+    │  │  8. Monitoring verification                                │      │
+    │  │     └─ Error rate OK? Response time OK? → Success          │      │
+    │  │                                                            │      │
+    │  └────────────────────────────────────────────────────────────┘      │
+    │                                                                      │
+    │  Deployment Environments:                                            │
+    │  ┌────────────────────────────────────────────────────────────┐      │
+    │  │  Development (dev namespace)                               │      │
+    │  │  ├─ Auto-deploy on commit (main branch)                    │      │
+    │  │  ├─ 1 pod per service                                      │      │
+    │  │  ├─ Smaller database instances (zonal)                     │      │
+    │  │  ├─ No SLA requirements                                    │      │
+    │  │  └─ URL: https://dev.jobzy.fi                              │      │
+    │  │                                                            │      │
+    │  │  Staging (staging namespace)                               │      │  
+    │  │  ├─ Auto-deploy on commit (main branch)                    │      │ 
+    │  │  ├─ 1-2 pods per service                                   │      │
+    │  │  ├─ Real-sized data (copy from prod monthly)               │      │
+    │  │  ├─ Load testing environment                               │      │
+    │  │  ├─ Pre-production replica                                 │      │
+    │  │  └─ URL: https://staging.jobzy.fi                          │      │
+    │  │                                                            │      │
+    │  │  Production (production namespace)                         │      │
+    │  │  ├─ Manual approval required (GitHub release tag)          │      │
+    │  │  ├─ 2-3 pods per service (HA)                              │      │
+    │  │  ├─ Full-sized databases (regional HA)                     │      │
+    │  │  ├─ 99.9% uptime SLA                                       │      │
+    │  │  ├─ Backup & disaster recovery active                      │      │
+    │  │  ├─ Monitoring & alerting 24/7                             │      │
+    │  │  └─ URL: https://jobzy.fi (primary)                        │      │
+    │  │                                                            │      │
+    │  └────────────────────────────────────────────────────────────┘      │
+    │                                                                      │
+    │  Secrets Management (Sealed Secrets):                                │
+    │  ┌────────────────────────────────────────────────────────────┐      │
+    │  │  • API keys (Stripe, Twilio, etc.) → Sealed Secrets        │      │
+    │  │  • Database passwords → Sealed Secrets                     │      │
+    │  │  • JWT signing keys → Sealed Secrets                       │      │
+    │  │  • OAuth credentials → Sealed Secrets                      │      │
+    │  │  • All encrypted at rest in etcd                           │      │
+    │  │  • Rotation: Every 90 days                                 │      │
+    │  │  • Audited: All access logged                              │      │
+    │  │                                                            │      │
+    │  └────────────────────────────────────────────────────────────┘      │
+    │                                                                      │
+    └──────────────────────────────────────────────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         INFRASTRUCTURE SUMMARY                              ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    CLOUD SERVICES (GCP):
+    ├─ Cloud Run (Frontend + Load Balancer)
+    │  └─ Cost: ~$50-80/month (auto-scaling)
+    │
+    ├─ GKE Kubernetes (3 nodes, n1-standard-4)
+    │  └─ Cost: ~$60-90/month (compute only)
+    │
+    ├─ Cloud SQL (11 databases, 1.9 TB total)
+    │  ├─ 6 MySQL instances (1,370 GB)
+    │  ├─ 5 PostgreSQL instances (507 GB)
+    │  └─ Cost: ~$200-250/month (with HA + backups)
+    │
+    ├─ Memorystore Redis (64 GB HA cluster)
+    │  └─ Cost: ~$150-180/month
+    │
+    ├─ Cloud Storage (GCS, 1-5 TB auto-scaling)
+    │  └─ Cost: ~$20-100/month (depends on usage)
+    │
+    ├─ Cloud Networking (VPC, firewalls, NAT)
+    │  └─ Cost: ~$20-50/month (egress)
+    │
+    ├─ Cloud Monitoring & Logging (included)
+    │  └─ Cost: Included in GCP free tier (generous)
+    │
+    └─ Load Balancers (2 × forwarding rules)
+       └─ Cost: ~$30-50/month
+
+
+    EXTERNAL SERVICES (SaaS):
+    ├─ Stripe (Payment Processing)
+    │  └─ Cost: 2.9% + $0.30 per transaction (variable)
+    │
+    ├─ Twilio (SMS)
+    │  └─ Cost: $0.0075 per SMS (1-100k/month) (variable)
+    │
+    ├─ Google Analytics 4
+    │  └─ Cost: FREE (unlimited events)
+    │
+    └─ Matomo (Optional, self-hosted in GKE)
+       └─ Cost: Included in GKE compute
+
+
+    TOTAL MONTHLY COST (Production):
+    ┌──────────────────────────────────────────────────────────┐
+    │  GCP Infrastructure:      ~$600-750/month                │
+    │  ├─ Cloud Run                    $50-80                  │
+    │  ├─ GKE Kubernetes               $60-90                  │
+    │  ├─ Cloud SQL (11 DBs)          $200-250                 │
+    │  ├─ Memorystore (Redis)         $150-180                 │
+    │  ├─ Cloud Storage (GCS)          $20-100                 │
+    │  ├─ Networking & Load Bal        $50-100                 │
+    │  └─ Monitoring/Logging           Included                │
+    │                                                          │
+    │  External SaaS (Variable):       ~$500-2,000/month       │
+    │  ├─ Stripe fees                 (2.9% + $0.30 per tx)    │
+    │  ├─ Twilio SMS                   ($0.0075 per SMS)       │
+    │  └─ Others                       (GA4 free)              │
+    │                                                          │
+    │  TOTAL: ~$1,100-2,750/month (depending on volume)        │
+    │                                                          │
+    │  Breakdown by transaction count:                         │
+    │  • 100 bookings/month  → ~$1,100-1,300/month             │
+    │  • 500 bookings/month  → ~$1,400-1,800/month             │
+    │  • 1,000 bookings/month→ ~$1,700-2,200/month             │
+    │  • 5,000 bookings/month→ ~$2,500-4,000/month             │
+    │                                                          │
+    └──────────────────────────────────────────────────────────┘
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         KEY BENEFITS OF THIS ARCHITECTURE                   ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    ✅ ADVANTAGES:
+
+    1. Managed Services (No Ops Burden)
+       • GCS replaces MinIO (80% cost savings)
+       • Memorystore replaces DIY Redis (auto-HA)
+       • Cloud SQL handles backup/replication
+       • Google manages security patches
+
+    2. Zero Downtime Operations
+       • Workload Identity Federation (no keys!)
+       • Automatic certificate rotation
+       • Service mesh for mTLS (Linkerd)
+       • Canary deployments (ArgoCD)
+       • Health checks & auto-recovery
+
+    3. Enterprise Security
+       • VPC isolation (private IPs for all databases)
+       • Encryption at rest (automatic)
+       • Encryption in transit (TLS everywhere)
+       • Audit logging (Cloud Audit Logs)
+       • DDoS protection (Cloudflare)
+       • WAF (Cloudflare rules)
+
+    4. Scalability Built-In
+       • Cloud Run auto-scales (0-10+ instances)
+       • GKE auto-scaling (add nodes as needed)
+       • Cloud SQL read replicas (unlimited)
+       • GCS unlimited storage (auto-scales)
+       • Memorystore cluster (auto-sharding)
+
+    5. Observability Out-of-the-Box
+       • Prometheus metrics (15s scrape)
+       • Grafana dashboards (20+ pre-built)
+       • ELK logging (30-day retention)
+       • Jaeger tracing (end-to-end)
+       • Cloud Monitoring integration
+
+    6. Cost Effective
+       • Pay only for what you use (no reserved capacity)
+       • Free tier covers development (~$300/month free)
+       • Managed services reduce ops costs
+       • Hybrid model (Cloud Run for frontend)
+       • No vendor lock-in (Kubernetes portable)
+
+    7. Developer Experience
+       • GitOps (ArgoCD watches GitHub)
+       • One-click deployments
+       • Instant rollback on failure
+       • No manual kubectl commands
+       • GitHub Actions for CI/CD
+       • Preview environments (staging)
+
+    8. Regulatory Compliance
+       • EU data residency (finland servers)
+       • GDPR compliance built-in
+       • SOC 2 certification (GCP)
+       • PCI compliance (Stripe handles cards)
+       • Data retention policies (configurable)
+
+
+    ⚠️  CONSIDERATIONS:
+
+    1. Learning Curve
+       • Kubernetes requires DevOps knowledge
+       • GCP console is powerful but complex
+       • Helm charts for deployment
+       • Solution: Use managed services where possible
+
+    2. Cost at Scale
+       • Database costs grow with data volume
+       • Memorystore expensive at 64GB+
+       • Solution: Use Cloud Spanner if sharding needed
+
+    3. Latency (Minor)
+       • Tiny latency from Cloud Run to GKE
+       • Cloud SQL in different zone possible
+       • Solution: All in same region (europe-north1)
+
+    4. Vendor Lock-In (GCP Specific)
+       • Cloud SQL not portable
+       • Cloud Storage different from S3 API
+       • Solution: Use managed services, Kubernetes is portable
+
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                         INFRASTRUCTURE COMPARISON                           ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+    Option A: FULL GCP (Recommended)
+    ├─ Cloud Run for frontend
+    ├─ GKE for Kubernetes
+    ├─ Cloud SQL for databases
+    ├─ Memorystore for Redis
+    ├─ GCS for object storage
+    └─ Cost: ~$600-750/month
+       Pros: Fully managed, minimal ops, auto-scaling, integrated
+       Cons: GCP vendor lock-in, higher latency unlikely
+
+    Option B: HYBRID (GCP + Self-Hosted K8s)
+    ├─ Cloud Run for frontend
+    ├─ Self-hosted K8s (Hetzner VPS)
+    ├─ Cloud SQL for databases
+    ├─ Memorystore for Redis
+    ├─ GCS for object storage
+    └─ Cost: ~$650-850/month (add €150-200 for VPS)
+       Pros: More control, potentially lower cost long-term
+       Cons: More ops burden, manual scaling
+
+    Option C: SELF-HOSTED (Full Control)
+    ├─ Hetzner Cloud VPS (3 nodes)
+    ├─ Self-hosted K8s (kubeadm)
+    ├─ Self-hosted PostgreSQL/MySQL
+    ├─ Self-hosted Redis (Sentinel)
+    ├─ MinIO for object storage
+    └─ Cost: ~$200-300/month + ops
+       Pros: Full control, potentially cheaper
+       Cons: Significant ops burden, manual maintenance
+
+    Option D: DOCKER COMPOSE (MVP Only)
+    ├─ Single VPS (€20/month)
+    ├─ Docker Compose for orchestration
+    ├─ Single database instance
+    ├─ All services on one server
+    └─ Cost: ~$20-40/month
+       Pros: Simple, cheap MVP
+       Cons: Zero HA, manual scaling, limited to 1 server
+
+    → RECOMMENDATION: Option A (Full GCP) for startup
+      • Managed services reduce ops burden
+      • Auto-scaling handles growth
+      • Security built-in
+      • Cost scales with usage (not fixed capacity)
+      • Switch to Option B later if needed
+
+
+---
+
+**Last Updated:** November 26, 2025  
+**Status:** Complete Network Architecture ✅  
+**Deployment Model:** GCP + Kubernetes (Hybrid Ready)  
+**Production Ready:** YES  
+**Team Size:** 2-3 DevOps engineers + application team

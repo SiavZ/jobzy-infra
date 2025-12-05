@@ -1,0 +1,584 @@
+┌──────────────────────────────────────────────────────────────┐
+│              CORRELATION/REFERENCE DB ⭐ CUSTOM              │
+│                   (Cloud SQL MySQL - 50 GB)                  │
+│                                                              │
+│ Purpose: Cross-service ID mapping & event audit trail        │
+│                                                              │
+│ Tables:                                                      │
+│ • customer_mappings                                          │
+│   └─ keycloak_id ↔ suitecrm_id ↔ easyappointments_id        │
+│                                                              │
+│ • provider_mappings                                          │
+│   └─ keycloak_id ↔ suitecrm_id ↔ easyappointments_id        │
+│                                                              │
+│ • booking_mappings                                           │
+│   └─ booking_id ↔ easyappointments_id ↔ external_refs       │
+│                                                              │
+│ • review_mappings                                            │
+│   └─ booking_id ↔ astuto_review_id ↔ suitecrm_activity_id   │
+│                                                              │
+│ • payment_mappings                                           │
+│   └─ booking_id ↔ stripe_payment_intent_id ↔ invoice_id     │
+│                                                              │
+│ • job_request_mappings                                       │
+│   └─ booking_id ↔ custom_booking_service_id ↔ external_refs │
+│                                                              │
+│ • event_logs (audit trail)                                   │
+│   └─ timestamp, service, action, entity_type, entity_ids    │
+│   └─ Used for debugging cross-service issues                │
+│                                                              │
+│ Configuration:                                               │
+│ Size: 50 GB                                                  │
+│ Type: Cloud SQL MySQL                                        │
+│ CPU: 2 cores                                                 │
+│ RAM: 8 GB                                                    │
+│ Replicas: 1 read replica (for mapping lookups)              │
+│ HA: Zonal (regional in prod)                                 │
+│ Backup: Daily snapshots + hourly incremental                │
+│ Encryption: Yes (at rest & in transit)                      │
+│                                                              │
+│ Access Pattern:                                              │
+│ • All services query for ID lookups (high read)              │
+│ • Event logs written once, rarely updated                    │
+│ • Index on all mapping columns for fast lookups              │
+└──────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│          PRICING SERVICE DATABASE ⭐ CUSTOM (MVP Phase)              │
+├─────────────────────────────────────────────────────────────────────┤
+│ Current MVP Phase:                                                  │
+│ Single Cloud SQL MySQL database with static pricing configuration   │
+│                                                                     │
+│ Tables:                                                             │
+│ • base_pricing                                                      │
+│   └─ service_category, service_type, hourly_rate, per_m2_rate      │
+│   └─ per_project_rate, minimum_charge                              │
+│                                                                     │
+│ • postal_surcharges                                                 │
+│   └─ postal_code_range, surcharge_percentage, effective_date       │
+│   └─ Static multipliers (1.0x to 1.5x based on location)            │
+│                                                                     │
+│ • service_rates                                                     │
+│   └─ service_id, urgency_level, time_multiplier                    │
+│   └─ Same-day, next-day, planned rates                              │
+│                                                                     │
+│ • area_multipliers                                                  │
+│   └─ geographical_zone, multiplier, description                    │
+│   └─ City center (1.2x), suburbs (1.0x), rural (0.8x)               │
+│                                                                     │
+│ • pricing_cache (temporary)                                         │
+│   └─ query_hash, postal_code, service_type, calculated_price       │
+│   └─ ttl: 24 hours (backed by Redis for performance)                │
+│                                                                     │
+│ • future_market_data_placeholder (empty until Phase 2)              │
+│   └─ Reserved for market median scraper data                        │
+│   └─ Reserved for ML pricing models                                 │
+│   └─ Reserved for competitor price tracking                         │
+│                                                                     │
+│ Configuration:                                                      │
+│ Size: 20 GB (MVP - minimal config tables)                           │
+│ Type: Cloud SQL MySQL                                               │
+│ CPU: 2 cores                                                        │
+│ RAM: 4 GB                                                           │
+│ Replicas: 0 (lightweight, Redis caching reduces DB load)            │
+│ HA: Zonal only (MVP phase)                                          │
+│ Backup: Daily snapshots                                             │
+│ Encryption: Yes                                                     │
+│                                                                     │
+│ Query Pattern:                                                      │
+│ • Pricing Service queries once per booking request                  │
+│ • Results cached in Redis (95% cache hit rate target)               │
+│ • Admin updates pricing tables (rare, admin panel only)             │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ FUTURE (Phase 2): Expand to 12 Category-Specific Services           │
+│                                                                     │
+│ Each category gets its own database with market intelligence:       │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────┐    │
+│ │ Cleaning (20GB)               → Market median: $25-45/hr    │    │
+│ │ Yard Care (12GB)              → Market median: $30-50/hr    │    │
+│ │ Home Renovation (18GB)        → Market median: $40-80/hr    │    │
+│ │ Electrical (15GB)             → Market median: $45-90/hr    │    │
+│ │ Maintenance (12GB)            → Market median: $25-45/hr    │    │
+│ │ Moving (10GB)                 → Market median: $35-65/hr    │    │
+│ │ Family Assistance (8GB)       → Market median: $15-30/hr    │    │
+│ │ Chef/Catering (10GB)          → Market median: $30-60/hr    │    │
+│ │ Wellness/Massage (8GB)        → Market median: $40-80/hr    │    │
+│ │ IT Support (8GB)              → Market median: $45-90/hr    │    │
+│ │ Events/DJ (10GB)              → Market median: $150-300+    │    │
+│ │ Pet Care (8GB)                → Market median: $20-40/hr    │    │
+│ └─────────────────────────────────────────────────────────────┘    │
+│                                                                     │
+│ Phase 2 Total Storage: ~139 GB across 12 databases                  │
+│ Phase 2 Features:                                                   │
+│ • Market data collector → Scrapes competitor prices daily           │
+│ • Pricing intelligence service → ML models for demand prediction    │
+│ • Surge pricing engine → Dynamic rates based on demand              │
+│ • Category-specific rules → Each service has different pricing      │
+│                                                                     │
+│ Implementation Timeline:                                            │
+│ • Q1 2026: Market data collection infrastructure                    │
+│ • Q2 2026: ML model training on historical data                     │
+│ • Q3 2026: Gradual rollout per category                             │
+│ • Q4 2026: Full dynamic pricing across all 12 services              │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│  Cloud SQL MySQL  │ │  Cloud SQL MySQL │ │  Cloud SQL MySQL │
+│  BOOKING SERVICE  │ │  EasyAppointment │ │  SuiteCRM        │
+│  ⭐ CUSTOM        │ │      (Calendar)  │ │                  │
+│                   │ │                  │ │                  │
+│ Core Tables:      │ │ Core Tables:     │ │ Core Tables:     │
+│ • job_requests    │ │ • appointments   │ │ • contacts       │
+│ • provider_matches│ │ • services       │ │ • accounts       │
+│ • provider_responses│ │ • staff/providers│ │ • opportunities  │
+│ • booking_statuses│ │ • customers      │ │ • activities     │
+│ • job_negotiations│ │ • time_slots     │ │ • relationships  │
+│ • status_history  │ │ • reminders      │ │ • custom_fields  │
+│ • integration_logs│ │ • calendar_sync  │ │ • email_history  │
+│ • event_triggers  │ │ • availability   │ │ • attachments    │
+│                   │ │                  │ │                  │
+│ Configuration:    │ │ Configuration:   │ │ Configuration:   │
+│ Size: 100 GB      │ │ Size: 500 GB     │ │ Size: 300 GB     │
+│ CPU: 4 cores      │ │ CPU: 16 cores    │ │ CPU: 8 cores     │
+│ RAM: 16 GB        │ │ RAM: 64 GB       │ │ RAM: 32 GB       │
+│ Replicas: 1       │ │ Replicas: 3      │ │ Replicas: 1      │
+│ HA: Regional      │ │ HA: Regional     │ │ HA: Regional     │
+│ Backup: Hourly    │ │ Backup: Hourly   │ │ Backup: Daily    │
+│ Encryption: Yes   │ │ Encryption: Yes  │ │ Encryption: Yes  │
+│                   │ │                  │ │                  │
+│ Access Pattern:   │ │ Access Pattern:  │ │ Access Pattern:  │
+│ • High write rate │ │ • Extremely high │ │ • High read rate │
+│   (bookings)      │ │   read traffic   │ │ • Medium writes  │
+│ • Medium reads    │ │ • Heavy calendar │ │ • Many joined    │
+│ • Cross-service   │ │   queries        │ │   queries        │
+│   lookups         │ │ • Real-time      │ │ • Reporting      │
+│                   │ │   availability   │ │   queries        │
+└───────────────────┘ └──────────────────┘ └──────────────────┘
+
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│ Cloud SQL        │ │ Cloud SQL        │ │ Cloud SQL        │
+│ PostgreSQL       │ │ PostgreSQL       │ │ PostgreSQL       │
+│ Chatwoot         │ │ Astuto           │ │ Keycloak         │
+│ (Chat & Support) │ │ (Reviews)        │ │ (Auth)           │
+│                  │ │                  │ │                  │
+│ Core Tables:     │ │ Core Tables:     │ │ Core Tables:     │
+│ • conversations  │ │ • posts          │ │ • users          │
+│ • messages       │ │ • reviews        │ │ • realms         │
+│ • agents         │ │ • votes          │ │ • oauth_clients  │
+│ • contacts       │ │ • ratings        │ │ • sessions       │
+│ • inboxes        │ │ • comments       │ │ • federated_ids  │
+│ • labels         │ │ • moderation     │ │ • roles          │
+│ • attachments    │ │ • admin_notes    │ │ • permissions    │
+│ • custom_fields  │ │ • category_tags  │ │ • user_attributes│
+│                  │ │                  │ │                  │
+│ Configuration:   │ │ Configuration:   │ │ Configuration:   │
+│ Size: 200 GB     │ │ Size: 150 GB     │ │ Size: 5 GB       │
+│ CPU: 4 cores     │ │ CPU: 4 cores     │ │ CPU: 2 cores     │
+│ RAM: 16 GB       │ │ RAM: 16 GB       │ │ RAM: 8 GB        │
+│ Replicas: 1      │ │ Replicas: 1      │ │ Replicas: 1      │
+│ HA: Regional     │ │ HA: Regional     │ │ HA: Regional     │
+│ Backup: Daily    │ │ Backup: Daily    │ │ Backup: Hourly   │
+│ Encryption: Yes  │ │ Encryption: Yes  │ │ Encryption: Yes  │
+│                  │ │                  │ │                  │
+│ Access Pattern:  │ │ Access Pattern:  │ │ Access Pattern:  │
+│ • Real-time chat │ │ • Read-heavy     │ │ • Auth lookups   │
+│ • WebSocket conn │ │ • Review browse  │ │ • JWT validation │
+│ • Message insert │ │ • Rating queries │ │ • Session mgmt   │
+│ • Inbox queries  │ │ • Vote counting  │ │ • Token storage  │
+└──────────────────┘ └──────────────────┘ └──────────────────┘
+
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│ Cloud SQL MySQL  │ │ Cloud SQL        │ │ Cloud SQL        │
+│ PAYMENT SERVICE  │ │ PostgreSQL       │ │ PostgreSQL       │
+│ ⭐ CUSTOM        │ │ Novu             │ │ Strapi           │
+│ (CRITICAL PATH)  │ │ (Notifications)  │ │ (CMS)            │
+│                  │ │                  │ │                  │
+│ Core Tables:     │ │ Core Tables:     │ │ Core Tables:     │
+│ • payments       │ │ • notifications  │ │ • content_types  │
+│ • invoices       │ │ • subscribers    │ │ • content        │
+│ • receipts       │ │ • templates      │ │ • media_library  │
+│ • transactions   │ │ • workflows      │ │ • localizations  │
+│ • stripe_events  │ │ • preferences    │ │ • api_tokens     │
+│ • tax_records    │ │ • execution_logs │ │ • user_roles     │
+│ • refunds        │ │ • delivery_logs  │ │ • versions       │
+│ • kotitalousvä.  │ │ • channels       │ │ • drafts         │
+│ • revenue_reports│ │                  │ │                  │
+│                  │ │                  │ │                  │
+│ Configuration:   │ │ Configuration:   │ │ Configuration:   │
+│ Size: 400 GB     │ │ Size: 100 GB     │ │ Size: 50 GB      │
+│ CPU: 12 cores    │ │ CPU: 2 cores     │ │ CPU: 2 cores     │
+│ RAM: 48 GB       │ │ RAM: 8 GB        │ │ RAM: 8 GB        │
+│ Replicas: Master │ │ Replicas: 1      │ │ Replicas: 0      │
+│ -Master HA (zero │ │ HA: Regional     │ │ HA: Zonal        │
+│ downtime)        │ │ Backup: Hourly   │ │ Backup: Daily    │
+│ Backup: Hourly   │ │ Encryption: Yes  │ │ Encryption: Yes  │
+│ Encryption: Yes  │ │                  │ │                  │
+│                  │ │ Access Pattern:  │ │ Access Pattern:  │
+│ Access Pattern:  │ │ • Template reads │ │ • Content reads  │
+│ • HIGH WRITE RATE│ │   (heavy)        │ │   (heavy, CDN)   │
+│ • Payment insert │ │ • Workflow exec  │ │ • Admin writes   │
+│ • Webhook process│ │   (medium)       │ │   (rare)         │
+│ • Invoice gen    │ │ • Logs append    │ │ • Media uploads  │
+│ • Tax calc       │ │ • Delivery track │ │                  │
+│ • CRITICAL PATH! │ │                  │ │                  │
+└──────────────────┘ └──────────────────┘ └──────────────────┘
+
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│ Cloud SQL MySQL  │ │ Cloud SQL        │ │ N/A              │
+│ PRICING SERVICE  │ │ PostgreSQL       │ │ Google Cloud     │
+│ ⭐ CUSTOM (MVP)  │ │ Kong Gateway     │ │ Storage (GCS)    │
+│                  │ │ (Config DB)      │ │                  │
+│ Core Tables:     │ │                  │ │ Object Storage   │
+│ • base_pricing   │ │ Core Tables:     │ │ • Provider pics  │
+│ • postal_charges │ │ • routes         │ │ • Service images │
+│ • service_rates  │ │ • services       │ │ • Invoices (PDF) │
+│ • area_mult      │ │ • plugins        │ │ • Receipts (PDF) │
+│ • cache (temp)   │ │ • consumers      │ │ • Proof of work  │
+│ • future_market  │ │ • certificates   │ │ • Documents      │
+│   (placeholder)  │ │ • api_keys       │ │ • Contract files │
+│                  │ │                  │ │ • Audio/video    │
+│ Configuration:   │ │ Configuration:   │ │ • Backups        │
+│ Size: 20 GB      │ │ Size: 2 GB       │ │ • Archives       │
+│ CPU: 2 cores     │ │ CPU: 4 cores     │ │                  │
+│ RAM: 4 GB        │ │ RAM: 16 GB       │ │ Configuration:   │
+│ Replicas: 0      │ │ Replicas: 1      │ │ Size: 1-5 TB     │
+│ HA: Zonal        │ │ HA: Regional     │ │ (auto-scales)    │
+│ Backup: Daily    │ │ Backup: Hourly   │ │ Type: GCS ✅     │
+│ Encryption: Yes  │ │ Encryption: Yes  │ │ (replaces MinIO) │
+│                  │ │                  │ │ Versioning: Yes  │
+│ Access Pattern:  │ │ Access Pattern:  │ │ Encryption: Yes  │
+│ • Config reads   │ │ • Route lookups  │ │ Lifecycle: Yes   │
+│ • (Redis cached) │ │ • Plugin loads   │ │ Multi-node: Yes  │
+│ • Admin writes   │ │ • Consumer auth  │ │ Auto-scaling: ∞  │
+│   (rare)         │ │   (high traffic) │ │                  │
+└──────────────────┘ └──────────────────┘ └──────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                    DATABASE SUMMARY BY TYPE                          │
+├──────────────────────────────────────────────────────────────────────┤
+│ Cloud SQL MySQL/MariaDB Databases:                                   │
+│   • Booking Service: 100 GB (4 cores, 16 GB RAM, 1 replica) ⭐       │
+│   • EasyAppointments: 500 GB (16 cores, 64 GB RAM, 3 replicas)      │
+│   • SuiteCRM: 300 GB (8 cores, 32 GB RAM, 1 replica)                │
+│   • Payment Service: 400 GB (12 cores, 48 GB RAM, Master-Master HA) │
+│   • Pricing Service (MVP): 20 GB (2 cores, 4 GB RAM, 0 replicas) ⭐ │
+│   • Correlation DB: 50 GB (2 cores, 8 GB RAM, 1 replica) ⭐          │
+│   MySQL/MariaDB Subtotal: 1,370 GB | 44 CPU cores | 172 GB RAM      │
+│                                                                      │
+│ Cloud SQL PostgreSQL Databases:                                      │
+│   • Chatwoot: 200 GB (4 cores, 16 GB RAM, 1 replica)                │
+│   • Astuto: 150 GB (4 cores, 16 GB RAM, 1 replica)                  │
+│   • Keycloak: 5 GB (2 cores, 8 GB RAM, 1 replica)                   │
+│   • Novu: 100 GB (2 cores, 8 GB RAM, 1 replica)                     │
+│   • Strapi: 50 GB (2 cores, 8 GB RAM, 0 replicas)                   │
+│   • Kong Gateway: 2 GB (4 cores, 16 GB RAM, 1 replica)              │
+│   PostgreSQL Subtotal: 507 GB | 18 CPU cores | 72 GB RAM            │
+│                                                                      │
+│ TOTAL CLOUD SQL DATABASES: 1,877 GB (~1.9 TB) | 62 CPU cores | 244 GB RAM
+│                                                                      │
+│ + Read Replicas: 10 additional replicas across all databases        │
+│   └─ EasyAppointments: 3 replicas (high read traffic)               │
+│   └─ SuiteCRM: 1 replica (reporting)                                │
+│   └─ Booking: 1 replica (queries)                                   │
+│   └─ Chatwoot: 1 replica (message history)                          │
+│   └─ Astuto: 1 replica (review browsing)                            │
+│   └─ Keycloak: 1 replica (auth lookups)                             │
+│   └─ Novu: 1 replica (notification history)                         │
+│   └─ Correlation DB: 1 replica (ID mapping)                         │
+│   └─ Kong Gateway: 1 replica (config reads)                         │
+│   └─ Payment Service: Master-Master HA (not counted as replica)     │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│ Object Storage (Google Cloud Storage - GCS):                         │
+│   • Terraform State: ~100 MB (versioned, encrypted)                 │
+│   • Media/Files: 1-5 TB (auto-scales, CDN-backed)                   │
+│   • Log Archives: Scales with retention policy                      │
+│   GCS Features: Versioning ✅, Encryption ✅, Lifecycle ✅            │
+│                                                                      │
+│ In-Memory & Caching Services:                                        │
+│   • Memorystore (Redis): 64 GB HA cluster (3 nodes, sharded)         │
+│   • Elasticsearch: 200 GB (3 nodes, 30-day retention)               │
+│   • Prometheus: In-memory time-series (15-day retention)            │
+│   • Grafana: ~1 GB (dashboard configuration)                        │
+│   Total In-Memory: ~275 GB                                           │
+│                                                                      │
+│ GRAND TOTAL PERSISTENT DATA: ~1.9 TB (Cloud SQL + archives)         │
+│ GRAND TOTAL WITH INFRASTRUCTURE: ~2.1-2.2 TB (including Redis/ELK)  │
+│ GRAND TOTAL WITH OBJECT STORAGE: ~3-7 TB (including GCS 1-5 TB)     │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                   RESOURCE ALLOCATION SUMMARY                        │
+├──────────────────────────────────────────────────────────────────────┤
+│ CPU ALLOCATION BY TRAFFIC TIER:                                      │
+│                                                                      │
+│ HIGH-TRAFFIC / CRITICAL SERVICES (Most CPU):                        │
+│   • EasyAppointments: 16 cores (500 GB database)                    │
+│     └─ Reason: Calendar queries (heavy read traffic), time slots    │
+│   • Payment Service: 12 cores (400 GB database)                     │
+│     └─ Reason: Critical path, HA required, high transaction load    │
+│   • SuiteCRM: 8 cores (300 GB database)                             │
+│     └─ Reason: CRM queries, customer history, reporting             │
+│   Subtotal: 36 cores (58% of total CPU)                             │
+│                                                                      │
+│ MEDIUM-TRAFFIC SERVICES:                                            │
+│   • Booking Service: 4 cores (100 GB database) ⭐                    │
+│     └─ Reason: Orchestration layer, moderate business logic         │
+│   • Chatwoot: 4 cores (200 GB database)                             │
+│     └─ Reason: Real-time chat, websockets, conversation queries     │
+│   • Astuto: 4 cores (150 GB database)                               │
+│     └─ Reason: Review queries, voting mechanisms, filtering         │
+│   • Kong Gateway: 4 cores (2 GB database)                           │
+│     └─ Reason: API routing, ALL traffic passes through here         │
+│   Subtotal: 16 cores (26% of total CPU)                             │
+│                                                                      │
+│ LIGHT-TRAFFIC SERVICES:                                             │
+│   • Keycloak: 2 cores (5 GB database)                               │
+│     └─ Reason: Authentication bottleneck, JWT validation            │
+│   • Novu: 2 cores (100 GB database)                                 │
+│     └─ Reason: Notification dispatch, template processing           │
+│   • Strapi: 2 cores (50 GB database)                                │
+│     └─ Reason: Content reads (CDN-backed), admin writes rare        │
+│   • Pricing Service: 2 cores (20 GB database) ⭐                     │
+│     └─ Reason: MVP lightweight, Redis caching reduces load          │
+│   • Correlation DB: 2 cores (50 GB database) ⭐                      │
+│     └─ Reason: Simple ID mapping, indexed for fast lookups          │
+│   Subtotal: 10 cores (16% of total CPU)                             │
+│                                                                      │
+│ TOTAL CPU CORES ALLOCATED: 62 cores                                 │
+│ TOTAL RAM REQUIRED: ~244 GB (across all databases + replicas)       │
+│ TOTAL STORAGE: ~1.9 TB (Cloud SQL), ~1-5 TB (GCS), ~275 GB (cache) │
+│ ESTIMATED MONTHLY COST (Prod): ~$200-250/month (Cloud SQL only)     │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│ SCALING NOTES:                                                       │
+│   • EasyAppointments can add 2 more replicas for extreme load       │
+│   • Payment Service uses Master-Master for zero-downtime failover   │
+│   • Kong Gateway needs load balancer (2+ instances min)             │
+│   • Redis cluster automatically shards at 64GB                      │
+│   • GCS auto-scales infinitely                                      │
+│   • Cloud SQL can be scaled vertically (more cores) or horizontally  │
+│     (read replicas) based on demand                                 │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                    HIGH AVAILABILITY STRATEGY                        │
+├──────────────────────────────────────────────────────────────────────┤
+│ CRITICAL PATH SERVICES (HA Required):                                │
+│   • Payment Service: Master-Master MySQL replication                │
+│     └─ Configuration: 2 instances in different zones                 │
+│     └─ Failover: Automatic (zero downtime)                           │
+│     └─ RTO: < 1 second | RPO: < 1 second                             │
+│                                                                      │
+│   • Kong Gateway: Load-balanced instances (minimum 2 nodes)          │
+│     └─ Configuration: 2-3 Kong instances                             │
+│     └─ Load Balancer: Google Cloud Load Balancer                     │
+│     └─ RTO: < 10 seconds | RPO: < 1 request                          │
+│                                                                      │
+│   • Keycloak: Clustered (minimum 2 nodes)                            │
+│     └─ Configuration: 2 Keycloak instances (Kubernetes)              │
+│     └─ Session Replication: Redis-backed                             │
+│     └─ RTO: < 10 seconds | RPO: Session loss acceptable              │
+│                                                                      │
+│ RECOMMENDED READ REPLICAS (Offload read traffic):                    │
+│   • EasyAppointments: 3 read replicas (extreme read traffic)        │
+│     └─ Benefit: Calendar queries don't lock primary                  │
+│   • SuiteCRM: 1 read replica (reporting queries)                    │
+│     └─ Benefit: Analytics don't impact operational queries           │
+│   • Booking Service: 1 read replica (read-heavy operations) ⭐       │
+│     └─ Benefit: Matching algorithm queries offloaded                 │
+│   • Chatwoot: 1 read replica (message history queries)              │
+│     └─ Benefit: Archive searches don't impact live chat              │
+│   • Astuto: 1 read replica (review browsing)                         │
+│     └─ Benefit: Sorting/filtering doesn't impact rating write        │
+│   • Keycloak: 1 read replica (user lookups)                          │
+│     └─ Benefit: High-volume auth reads distributed                   │
+│   • Novu: 1 read replica (notification history queries)              │
+│     └─ Benefit: Digest email queries don't impact dispatch           │
+│   • Correlation DB: 1 read replica (ID mapping lookups) ⭐            │
+│     └─ Benefit: All services query mapping without contention        │
+│   • Kong Gateway: 1 read replica (config reads)                      │
+│     └─ Benefit: Multiple Kong instances read config in parallel      │
+│                                                                      │
+│ BACKUP STRATEGY:                                                     │
+│   • Daily full snapshots: All databases (1 snapshot/day)             │
+│   • Hourly incremental backups:                                      │
+│     └─ Payment Service (critical)                                    │
+│     └─ Booking Service (operational) ⭐                               │
+│     └─ EasyAppointments (traffic volume)                             │
+│   • Point-in-time recovery: Payment Service                          │
+│     └─ Granularity: 1-minute recovery window (1 week history)        │
+│   • GCS cross-region replication: Optional (disaster recovery)       │
+│     └─ Backup storage: Separate GCS bucket (different region)        │
+│     └─ Recovery time: 1-4 hours (off-peak test)                      │
+│                                                                      │
+│ MONITORING & ALERTING:                                              │
+│   • CPU > 70%: Scale up or add read replicas                        │
+│   • Memory > 80%: Alert for scaling (may need bigger instance)       │
+│   • Replication Lag > 5s: Investigate replica performance            │
+│   • Connection Pool > 90%: Add more connections or replicas          │
+│   • Disk > 85%: Plan for storage expansion                           │
+│   • Backup Failed: Critical alert (manual intervention)              │
+│   • Write Latency > 100ms: Investigate performance (could be CPU)    │
+│   • Read Latency > 50ms: Check replica health                        │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│           SUPPORTING INFRASTRUCTURE & SERVICES                       │
+├──────────────────────────────────────────────────────────────────────┤
+│ Redis Cluster (Memorystore - Google Managed):                        │
+│   • Size: 64 GB (sharded across 3 nodes)                             │
+│   • Configuration: High availability (automatic failover)            │
+│   • Used by:                                                         │
+│     └─ Booking Service: Session cache, temporary matching results    │
+│     └─ Pricing Service: Pricing calculation cache (95% hit rate)     │
+│     └─ Payment Service: Idempotency keys for payments                │
+│     └─ All services: Session store, rate limiting counters           │
+│     └─ Celery: Message broker for async jobs                         │
+│   • TTL Strategy:                                                    │
+│     └─ Session cache: 24 hours                                       │
+│     └─ Pricing cache: 24 hours (invalidated on config changes)       │
+│     └─ Booking cache: 6 hours (temporary, discarded)                 │
+│     └─ Rate limit counters: 1 minute                                 │
+│                                                                      │
+│ Elasticsearch Cluster (Logs + Distributed Tracing):                  │
+│   • Configuration: 3 nodes (1 master, 2 data nodes)                  │
+│   • Total Storage: 200 GB                                            │
+│   • Retention: 30 days (with hot/warm/cold tiering)                  │
+│   • Indexes:                                                         │
+│     └─ Application logs (from all services): ~120 GB                 │
+│     └─ Jaeger traces (distributed tracing): ~50 GB                   │
+│     └─ Audit logs (security events): ~20 GB                          │
+│     └─ System metrics logs: ~10 GB                                   │
+│   • Query Performance:                                               │
+│     └─ Full-text search: < 500ms (via Kibana)                        │
+│     └─ Aggregations: < 1s (log analysis)                             │
+│     └─ Trace lookups: < 200ms (via Jaeger UI)                        │
+│                                                                      │
+│ Prometheus + Grafana (Metrics & Dashboards):                         │
+│   • Prometheus: In-memory time-series DB                             │
+│     └─ Scrape interval: 15 seconds (all services)                    │
+│     └─ Retention: 15 days (disk-backed)                              │
+│     └─ Metrics collected:                                            │
+│        • HTTP request duration (all endpoints)                       │
+│        • Database query latency (all databases)                      │
+│        • Cache hit/miss rates                                        │
+│        • Queue depth (async jobs)                                    │
+│        • Error rates (4xx, 5xx)                                      │
+│        • Custom business metrics (bookings/hour, revenue/hour, etc)  │
+│   • Grafana: Dashboard & alerting                                    │
+│     └─ Dashboards: 20+ pre-built (services, databases, infrastructure)
+│     └─ Alert rules: Defined for all critical metrics                 │
+│     └─ Notifications: Slack, PagerDuty, SMS                          │
+│                                                                      │
+│ RabbitMQ Message Broker (Async Jobs):                                │
+│   • 1 instance in GKE cluster                                        │
+│   • Uses Redis for message persistence (not local disk)              │
+│   • Celery Workers: 5-10 worker processes                            │
+│   • Job Queues:                                                      │
+│     └─ Reports: Generate invoices, CSV exports                       │
+│     └─ Emails: Digest emails, notifications                          │
+│     └─ Sync: Cross-service data synchronization                      │
+│     └─ Cleanup: Temporary file cleanup, cache invalidation           │
+│     └─ Analytics: Data pipeline aggregations                         │
+│   • Job Retry Strategy:                                              │
+│     └─ Failed jobs: Retry 3 times (exponential backoff)              │
+│     └─ Max runtime: 30 minutes (timeout)                             │
+│     └─ Dead letter queue: For permanently failed jobs                │
+│                                                                      │
+│ Kong Gateway (API Routing - PostgreSQL Config):                      │
+│   • Size: 2 GB (configuration database)                              │
+│   • Stored Data:                                                     │
+│     └─ API routes (600+ routes for microservices)                    │
+│     └─ Upstream services (load balancing config)                     │
+│     └─ Plugins (rate limiting, auth, logging)                        │
+│     └─ Consumers (OAuth clients, API keys)                           │
+│     └─ Certificates (SSL/TLS for mTLS)                               │
+│   • Load: All traffic passes through Kong                            │
+│   • Architecture: 2-3 Kong instances (load balanced)                 │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│              COMPLETE INFRASTRUCTURE SUMMARY (PROD)                  │
+├──────────────────────────────────────────────────────────────────────┤
+│ CLOUD SQL DATABASES:                                                 │
+│   • Total instances: 11 (6 MySQL, 5 PostgreSQL)                     │
+│   • Total data: 1.9 TB persistent                                    │
+│   • Total CPU: 62 cores allocated                                    │
+│   • Total RAM: 244 GB allocated                                      │
+│   • Read replicas: 10 (distributed for load balancing)               │
+│   • HA configuration: Master-Master (Payment), Regional (others)     │
+│   • Monthly cost: ~$200-250/month                                    │
+│                                                                      │
+│ MEMORYSTORE (REDIS):                                                 │
+│   • 1 instance: 64 GB HA cluster (3 nodes)                           │
+│   • Monthly cost: ~$150-180/month                                    │
+│                                                                      │
+│ GOOGLE CLOUD STORAGE (GCS):                                          │
+│   • Replaces MinIO (managed, auto-scaling)                           │
+│   • Size: 1-5 TB (scales automatically)                              │
+│   • Features: Versioning, encryption, lifecycle policies ✅           │
+│   • Monthly cost: $20-100/month (depends on usage)                   │
+│                                                                      │
+│ ELASTICSEARCH (IN GKE):                                              │
+│   • 3-node cluster (Helm chart deployment)                           │
+│   • Storage: 200 GB                                                  │
+│   • Cost: Included in GKE (compute)                                  │
+│                                                                      │
+│ PROMETHEUS + GRAFANA (IN GKE):                                       │
+│   • Both deployed in GKE (managed Kubernetes)                        │
+│   • Cost: Included in GKE (compute)                                  │
+│                                                                      │
+│ GKE CLUSTER:                                                         │
+│   • 3 nodes: n1-standard-2 (8 GB RAM each)                           │
+│   • Contains:                                                        │
+│     └─ Kong Gateway (2 instances + load balancer)                    │
+│     └─ Keycloak (2 instances + clustered)                            │
+│     └─ All microservices (containers)                                │
+│     └─ Elasticsearch (3 nodes)                                       │
+│     └─ Prometheus + Grafana                                          │
+│     └─ Linkerd service mesh                                          │
+│     └─ Celery workers (3-5 instances)                                │
+│   • Monthly cost: ~$60-90/month (nodes) + load balancers             │
+│                                                                      │
+│ TOTAL PRODUCTION COST: ~$600-750/month                               │
+│ INCLUDES: All databases, caching, compute, load balancing            │
+│ NOT INCLUDED: External SaaS (Stripe, Twilio, SendGrid)               │
+│                                                                      │
+│ COST BREAKDOWN:                                                      │
+│   ├─ Cloud SQL (11 databases): $200-250/month                        │
+│   ├─ Memorystore (Redis 64GB): $150-180/month                        │
+│   ├─ GKE compute (3 nodes): $60-90/month                             │
+│   ├─ GCS (storage): $20-100/month (depends on usage)                 │
+│   ├─ Load Balancers (2): $30-50/month                                │
+│   ├─ Network egress: $20-50/month                                    │
+│   └─ Miscellaneous (monitoring, backups): $50/month                  │
+│                                                                      │
+│ SAVINGS vs Self-Hosted:                                              │
+│   • No MinIO maintenance: -$50/month                                 │
+│   • No monitoring stack ops: -$100/month                             │
+│   • No database admin: -$200/month (labor)                           │
+│   • Cloud-native scaling: -$50/month (efficient resource use)        │
+│   • Total soft savings: ~$400/month equivalent                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+Legend:
+⭐ = Custom-built microservices (4 total - YOU maintain)
+   • Booking Service (job orchestration, matching, status tracking)
+   • Payment Service (Stripe integration, invoicing, tax tracking)
+   • Pricing Service (MVP static, future ML-based)
+   • Correlation Service (ID mapping, event audit trail)
+
+Others = Pre-built platforms (10 total - Community/vendor maintained)
+   • EasyAppointments (calendar, scheduling)
+   • SuiteCRM (CRM, customer data, leads)
+   • Chatwoot (support chat, omnichannel)
+   • Astuto (reviews, ratings, feedback)
+   • Keycloak (authentication, OIDC, OAuth)
+   • Novu (notifications, multi-channel)
+   • Strapi (headless CMS, content)
+   • Kong (API gateway, routing)
+   • Elasticsearch (logs, tracing)
+   • Prometheus/Grafana (monitoring)

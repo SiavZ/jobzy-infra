@@ -1,0 +1,302 @@
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        PWA FRONTEND (Next.js)                              │
+│                  (Web + Mobile Responsive, Progressive App)                │
+│                     Deployed on Google Cloud Run                           │
+└────────────────────────────┬───────────────────────────────────────────────┘
+                             │ HTTPS
+                             ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│              API GATEWAY (KONG) - Single Entry Point                       │
+│                      (In GKE Kubernetes Cluster)                           │
+│   • Route requests to microservices                                        │
+│   • Rate limiting & throttling                                             │
+│   • JWT validation with Keycloak                                           │
+│   • Request/response logging                                               │
+│   • mTLS with service mesh (Linkerd)                                       │
+└────────────────────────────┬───────────────────────────────────────────────┘
+                             │
+                    ┌────────┴────────┐
+                    │                 │
+                    ▼                 ▼
+        ┌──────────────────┐  ┌──────────────────┐
+        │   KEYCLOAK AUTH  │  │  SERVICE MESH    │
+        │  (Identity Mgmt) │  │   (Linkerd)      │
+        │ In GKE Cluster   │  │  In GKE Cluster  │
+        │                  │  │                  │
+        │ • Magic Links    │  │ • mTLS           │
+        │ • Social OAuth   │  │ • Load Balance   │
+        │ • SMS (Twilio)   │  │ • Retries        │
+        │ • JWT Tokens     │  │ • Circuit Break  │
+        │ • OIDC Endpoint  │  │ • Observability  │
+        └────────┬─────────┘  └────────┬─────────┘
+                 │                     │
+                 ▼                     │
+        [Cloud SQL PostgreSQL]         │
+        (Keycloak DB - 5 GB)           │
+        (Encrypted, Backed up)         │
+                                       ▼
+                          ┌───────────────────────────────────────┐
+                          │    CORE BUSINESS MICROSERVICES        │
+                          │         (In GKE Cluster)              │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ CUSTOM BOOKING SERVICE ⭐        │  │
+                          │  │ • Job request workflow          │  │
+                          │  │ • Provider matching algorithm   │  │
+                          │  │ • Booking status tracking       │  │
+                          │  │ • Provider acceptance/rejection │  │
+                          │  │ • Job negotiations              │  │
+                          │  │ • Integration orchestration     │  │
+                          │  │ [Cloud SQL MySQL - 100 GB]      │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ EasyAppointments (Calendar)     │  │
+                          │  │ • Calendar/scheduling display   │  │
+                          │  │ • Time slot management          │  │
+                          │  │ • Provider availability         │  │
+                          │  │ • Appointment reminders         │  │
+                          │  │ [Cloud SQL MySQL - 500 GB]      │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ SuiteCRM (Unified CRM)          │  │
+                          │  │ • Customer profiles             │  │
+                          │  │ • Provider profiles             │  │
+                          │  │ • Interaction history           │  │
+                          │  │ • Lead management               │  │
+                          │  │ • Data correlation hub          │  │
+                          │  │ [Cloud SQL MySQL - 300 GB]      │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ Chatwoot (Support & Chat)       │  │
+                          │  │ • Customer-Provider chat        │  │
+                          │  │ • Support communication         │  │
+                          │  │ • Omni-channel messaging        │  │
+                          │  │ • Ticket management             │  │
+                          │  │ [Cloud SQL PostgreSQL - 200 GB] │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ Astuto (Reviews & Ratings)      │  │
+                          │  │ • Customer feedback             │  │
+                          │  │ • Provider ratings              │  │
+                          │  │ • Review management             │  │
+                          │  │ • Trust scores                  │  │
+                          │  │ • Correlated with booking IDs   │  │
+                          │  │ [Cloud SQL PostgreSQL - 150 GB] │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ Strapi (Headless CMS)           │  │
+                          │  │ • Service descriptions          │  │
+                          │  │ • Provider profiles/banners     │  │
+                          │  │ • Category content              │  │
+                          │  │ • Blog/Help articles            │  │
+                          │  │ • Media library (via GCS)       │  │
+                          │  │ [Cloud SQL PostgreSQL - 50 GB]  │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ Novu (Notifications Engine)     │  │
+                          │  │ • Email notifications           │  │
+                          │  │ • SMS via Twilio                │  │
+                          │  │ • Push notifications            │  │
+                          │  │ • In-app messages               │  │
+                          │  │ • Multi-channel workflows       │  │
+                          │  │ [Cloud SQL PostgreSQL - 100 GB] │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ CUSTOM PAYMENT SERVICE ⭐        │  │
+                          │  │ • Stripe API integration        │  │
+                          │  │ • Payment orchestration         │  │
+                          │  │ • Webhook handling              │  │
+                          │  │ • Invoice/Receipt generation    │  │
+                          │  │ • Kotitalousvähennys reporting  │  │
+                          │  │ [Cloud SQL MySQL - 400 GB]      │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ CUSTOM PRICING SERVICE (MVP) ⭐  │  │
+                          │  │ • Static pricing (MVP phase)    │  │
+                          │  │ • Basic area/postal calculations│  │
+                          │  │ • Future: Market median engine  │  │
+                          │  │ • Future: ML pricing models     │  │
+                          │  │ • Caches results in Memorystore │  │
+                          │  │ [Cloud SQL MySQL - 20 GB]       │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          │  ┌─────────────────────────────────┐  │
+                          │  │ CORRELATION/REFERENCE DB ⭐      │  │
+                          │  │ • Cross-service ID mapping      │  │
+                          │  │ • customer_id maps              │  │
+                          │  │ • provider_id maps              │  │
+                          │  │ • booking_id maps               │  │
+                          │  │ • review_id maps                │  │
+                          │  │ • event_logs                    │  │
+                          │  │ [Cloud SQL MySQL - 50 GB]       │  │
+                          │  └─────────────────────────────────┘  │
+                          │                                       │
+                          └───────────────────────────────────────┘
+                                           │
+            ┌──────────────────────────────┼──────────────────────────────┐
+            │                              │                              │
+            ▼                              ▼                              ▼
+┌────────────────────────┐    ┌────────────────────────┐      ┌───────────────────┐
+│  OBJECT STORAGE LAYER  │    │  CACHING & QUEUE LAYER │      │ ASYNC JOBS        │
+│    (Google Cloud       │    │                        │      │                   │
+│     Storage - GCS)     │    │ Memorystore (Redis)    │      │ Celery + RabbitMQ │
+│                        │    │ Cluster (managed)      │      │ In GKE            │
+│                        │    │ • Cache layer          │      │ • Async jobs      │
+│ • Provider pics        │    │ • Session store        │      │ • Scheduled tasks │
+│ • Service photos       │    │ • Celery broker        │      │  • Report gen     │
+│ • Invoice attachments  │    │ • Pricing cache        │      │  • Email digest   │
+│ • Proof of work        │    │ • Queue storage        │      │  • Data sync      │
+│ • Document storage     │    │ • Rate limit counters  │      │  • Cleanup jobs   │
+│ • Backups              │    │ • Job queue storage    │      │  • Temp data proc │
+│                        │    │ [In-memory - 64 GB HA] │      │ [Uses Redis]      │
+│ Bucket naming:         │    │                        │      │                   │
+│ jobzy-{env}-storage    │    │                        │      │                   │
+│ europe-north1          │    │                        │      │                   │
+│ Versioning: Enabled    │    │                        │      │                   │
+│ Encryption: Enabled    │    │                        │      │                   │
+│ Lifecycle: Configured  │    │                        │      │                   │
+└────────────────────────┘    └────────────────────────┘      └───────────────────┘
+            │                              │                              │
+            │                              │                              │
+            │                  ┌────────────────────────┐                 │
+            │                  │  EXTERNAL SERVICES     │                 │
+            │                  │      (SaaS)            │                 │
+            │                  │                        │                 │
+            │                  │  STRIPE                │                 │
+            │                  │  • Payment Processing  │                 │
+            │                  │  • Card tokenization   │                 │
+            │                  │  • PCI Compliance      │                 │
+            │                  │  • Webhooks            │                 │
+            │                  │                        │                 │
+            │                  │  TWILIO                │                 │
+            │                  │  • SMS verification    │                 │
+            │                  │  • SMS notifications   │                 │
+            │                  │  • Phone validation    │                 │
+            │                  │                        │                 │
+            │                  │  SENDGRID (optional)   │                 │
+            │                  │  • Email delivery      │                 │
+            │                  │  • Email tracking      │                 │
+            │                  └────────────────────────┘                 │
+            │                               ▲                             │
+            └───────────────────────────────┼─────────────────────────────┘
+                                            │
+                                   (API calls & webhooks)
+                                            │
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      OBSERVABILITY & LOGGING LAYER                           │
+│                          (In GKE Cluster)                                    │
+│                                                                              │
+│  ┌──────────────────────────┐     ┌──────────────────────────┐               │
+│  │ ELK Stack                │     │ Prometheus + Grafana     │               │
+│  │ • Elasticsearch          │     │ • Metrics collection     │               │
+│  │ • Logstash               │     │ • Dashboard visualization│               │
+│  │ • Kibana (UI)            │     │ • Alerting               │               │
+│  │ • Log aggregation        │     │ • Performance tracking   │               │
+│  │ • Structured logging     │     │ • Service-level metrics  │               │
+│  │ [Elasticsearch - 150 GB] │     │ [In-memory time-series]  │               │
+│  └──────────────────────────┘     └──────────────────────────┘               │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────┐                │
+│  │ Jaeger (Distributed Tracing)                             │                │
+│  │ • End-to-end request tracking                            │                │
+│  │ • Latency analysis                                       │                │
+│  │ • Service dependency visualization                       │                │
+│  │ • Performance bottleneck detection                       │                │
+│  │ • Multi-service correlation                              │                │
+│  │ [Elasticsearch backend - 50 GB]                          │                │
+│  └──────────────────────────────────────────────────────────┘                │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────┐                │
+│  │ GCP Cloud Logging (Native Integration)                   │                │
+│  │ • Automatic GKE logs                                     │                │
+│  │ • Application stdout/stderr                              │                │
+│  │ • Audit logs for security                                │                │
+│  │ • Cost tracking & billing logs                           │                │
+│  │ • Long-term retention (Cloud Storage)                    │                │
+│  └──────────────────────────────────────────────────────────┘                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+            ┌─────────────────────────┼─────────────────────────┐
+            │                         │                         │
+            ▼                         ▼                         ▼
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐
+│  Cloud SQL           │  │  Cloud SQL           │  │  Cloud SQL       │
+│  PostgreSQL          │  │  MySQL / MariaDB     │  │  MySQL / MariaDB │
+│  (Keycloak)          │  │  (Booking Service)   │  │  (EasyAppoint.)  │
+│                      │  │                      │  │                  │
+│ • User identities    │  │ • Job requests       │  │ • Appointments   │
+│ • OAuth sessions     │  │ • Provider matches   │  │ • Services       │
+│ • Federated IDs      │  │ • Provider responses │  │ • Providers      │
+│ • JWT tokens         │  │ • Booking statuses   │  │ • Customers      │
+│ • Realm configs      │  │ • Job negotiations   │  │ • Time slots     │
+│ • Social links       │  │ • Status history     │  │ • Schedules      │
+│                      │  │ • Integration events │  │ • Service hours  │
+│ Size: 5 GB           │  │ Size: 100 GB         │  │ Size: 500 GB     │
+│ HA: Zonal            │  │ HA: Regional (prod)  │  │ HA: Regional     │
+│ Backups: Daily       │  │ Backups: Continuous  │  │ Backups: Cont.   │
+│ Encryption: Yes      │  │ Encryption: Yes      │  │ Encryption: Yes  │
+└──────────────────────┘  └──────────────────────┘  └──────────────────┘
+
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐
+│  Cloud SQL           │  │  Cloud SQL           │  │  Cloud SQL       │
+│  MySQL / MariaDB     │  │  PostgreSQL          │  │  PostgreSQL      │
+│  (SuiteCRM)          │  │  (Chatwoot)          │  │  (Astuto)        │
+│                      │  │                      │  │                  │
+│ • Contacts           │  │ • Conversations      │  │ • Reviews        │
+│ • Accounts           │  │ • Messages           │  │ • Ratings        │
+│ • Opportunities      │  │ • Agents             │  │ • Comments       │
+│ • Activities         │  │ • Contacts           │  │ • Votes          │
+│ • Relationships      │  │ • Inboxes            │  │ • Moderation     │
+│ • Custom fields      │  │ • Canned responses   │  │ • Analytics      │
+│                      │  │                      │  │                  │
+│ Size: 300 GB         │  │ Size: 200 GB         │  │ Size: 150 GB     │
+│ HA: Regional         │  │ HA: Regional         │  │ HA: Regional     │
+│ Backups: Continuous  │  │ Backups: Continuous  │  │ Backups: Cont.   │
+│ Encryption: Yes      │  │ Encryption: Yes      │  │ Encryption: Yes  │
+└──────────────────────┘  └──────────────────────┘  └──────────────────┘
+
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐
+│  Cloud SQL           │  │  Cloud SQL           │  │  Cloud SQL       │
+│  PostgreSQL          │  │  PostgreSQL          │  │  MySQL           │
+│  (Strapi CMS)        │  │  (Novu)              │  │  (Payment Svc)   │
+│                      │  │                      │  │                  │
+│ • Content types      │  │ • Notifications      │  │ • Payments       │
+│ • Media library      │  │ • Subscribers        │  │ • Invoices       │
+│ • Localizations      │  │ • Templates          │  │ • Receipts       │
+│ • API tokens         │  │ • Workflows          │  │ • Transactions   │
+│ • User roles         │  │ • Preferences        │  │ • Stripe events  │
+│ • Versions/drafts    │  │ • Executions         │  │ • Tax records    │
+│                      │  │ • Digest logs        │  │ • Refunds        │
+│ Size: 50 GB          │  │ Size: 100 GB         │  │ Size: 400 GB     │
+│ HA: Zonal            │  │ HA: Regional         │  │ HA: Regional     │
+│ Backups: Daily       │  │ Backups: Continuous  │  │ Backups: Cont.   │
+│ Encryption: Yes      │  │ Encryption: Yes      │  │ Encryption: Yes  │
+└──────────────────────┘  └──────────────────────┘  └──────────────────┘
+
+┌──────────────────────┐  ┌──────────────────────┐
+│  Cloud SQL           │  │  Cloud SQL           │
+│  MySQL               │  │  MySQL / MariaDB     │
+│  (Pricing MVP)       │  │  (Correlation DB)    │
+│                      │  │                      │
+│ • Static pricing     │  │ • customer_maps      │
+│ • Area rates         │  │ • provider_maps      │
+│ • Service rates      │  │ • booking_maps       │
+│ • Postal zones       │  │ • review_maps        │
+│ • Config tables      │  │ • payment_maps       │
+│ • Future placeholders│  │ • service_maps       │
+│                      │  │ • event_logs         │
+│ Size: 20 GB          │  │ • sync_history       │
+│ HA: Zonal            │  │ Size: 50 GB          │
+│ Backups: Daily       │  │ HA: Zonal            │
+│ Encryption: Yes      │  │ Backups: Daily       │
+└──────────────────────┘  │ Encryption: Yes      │
+                          └──────────────────────┘

@@ -1,0 +1,252 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│        PRICING SERVICE (MVP - SINGLE UNIFIED SERVICE)                │
+│                   ⭐ CUSTOM - YOU BUILD THIS                         │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐´   │
+│  │ PRICING SERVICE API                                          │    │
+│  │ • Single FastAPI endpoint for all categories                 │    │
+│  │ • Routes based on service_type parameter                     │    │
+│  │ • Calculates static pricing from config                      │    │
+│  │ • Returns quick quotes (< 100ms)                             │    │
+│  │ • Caches results in Redis (5-min TTL)                        │    │
+│  │ • Logs all pricing requests to Correlation DB                │    │
+│  │ [No database - stateless, Redis-backed]                      │    │
+│  │                                                              │    │
+│  │ API Endpoints:                                               │    │
+│  │ POST /api/v1/pricing/calculate                               │    │
+│  │ POST /api/v1/pricing/estimate                                │    │
+│  │ GET  /api/v1/pricing/rates/{service_type}                    │    │
+│  │ POST /api/v1/pricing/bulk-calculate                          │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+│                                ↓                                     │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │ PRICING DATABASE (MySQL - 20 GB)                             │    │
+│  │ Configuration storage for all 12 service types               │    │
+│  │                                                              │    │
+│  │ Tables:                                                      │    │
+│  │ • base_pricing                                               │    │
+│  │   ├── service_type (cleaning, yard_care, home_reno, etc.)    │    │
+│  │   ├── rate_per_hour DECIMAL(10,2)                            │    │
+│  │   ├── rate_per_m2 DECIMAL(10,2)                              │    │
+│  │   ├── rate_per_project DECIMAL(10,2)                         │    │
+│  │   ├── min_price DECIMAL(10,2)                                │    │
+│  │   ├── calculation_method ENUM(hourly/area/fixed/mixed)       │    │
+│  │   └── updated_at TIMESTAMP                                   │    │
+│  │                                                              │    │
+│  │ • postal_surcharges                                          │    │
+│  │   ├── postal_code VARCHAR(5) PRIMARY KEY                     │    │
+│  │   ├── area_classification (central/suburban/premium)         │    │
+│  │   ├── base_surcharge_percentage DECIMAL(5,2)                 │    │
+│  │   └── effective_from DATE                                    │    │
+│  │                                                              │    │
+│  │ • complexity_factors                                         │    │
+│  │   ├── service_type VARCHAR(50)                               │    │
+│  │   ├── factor_name (deep_clean, pet_present, etc.)            │    │
+│  │   ├── price_multiplier DECIMAL(5,2)                          │    │
+│  │   └── description TEXT                                       │    │
+│  │                                                              │    │
+│  │ • pricing_audit_log                                          │    │
+│  │   ├── request_id CHAR(36) UUID PRIMARY KEY                   │    │
+│  │   ├── service_type, postal_code, area_m2                     │    │
+│  │   ├── requested_params JSON                                  │    │
+│  │   ├── calculated_price DECIMAL(10,2)                         │    │
+│  │   └── created_at TIMESTAMP                                   │    │
+│  │                                                              │    │
+│  │ • pricing_overrides [Provider-specific pricing, future]      │    │
+│  │   ├── provider_id, service_type                              │    │
+│  │   ├── override_rate DECIMAL(10,2)                            │    │
+│  │   └── reason (seasonal/promotion/loyalty)                    │    │
+│  │                                                              │    │
+│  │ Size: 20 GB (lightweight, mostly config + audit logs)        │    │
+│  │ 2 CPU cores                                                  │    │
+│  │ 0 replicas (lightweight, Redis caching reduces load)         │    │
+│  │ Backup: Daily snapshots                                      │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+│                                                                      │
+│  MVP Pricing Calculation Flow:                                       │
+│                                                                      │
+│  Request: POST /api/v1/pricing/calculate                             │
+│  ├── service_type: "cleaning"                                        │
+│  ├── postal_code: "00100"                                            │
+│  ├── area_m2: 85                                                     │
+│  └── complexity_factors: ["deep_cleaning", "pet_present"]            │
+│                                                                      │
+│  Response:                                                           │
+│  ├── base_price: 34.90 (from base_pricing table)                     │
+│  ├── area_multiplier: 1.7 (85m² / 50m² base)                         │
+│  ├── complexity_multiplier: 1.2 (deep + pet factors)                 │
+│  ├── postal_surcharge: 10% (from postal_surcharges table)            │
+│  ├── estimated_price: 71.17                                          │
+│  ├── price_range: {min: 65.00, max: 100.00}                          │
+│  ├── calculation_method: "static_config"                             │
+│  ├── valid_until: "2025-11-21T20:05:00Z" (5-min cache)               │
+│  └── future_capabilities: {                                          │
+│        market_median_pricing: "coming_phase_2",                      │
+│        ml_optimization: "coming_phase_2"                             │
+│      }                                                               │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│    PHASE 2 (FUTURE): PRICING INTELLIGENCE LAYER                      │
+│         🚧 PLACEHOLDER STRUCTURE - DO NOT BUILD NOW 🚧               │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │ PRICING COORDINATOR (Future: Service Router)                 │    │
+│  │ • Routes requests to category-specific pricing engines       │    │
+│  │ • Orchestrates market data + ML models                       │    │
+│  │ • Manages surge pricing & demand-based adjustments           │    │
+│  │ • Caches all results in Redis                                │    │
+│  │ [No database - stateless router, Redis-backed]               │    │
+│  │                                                              │    │
+│  │ Future API Endpoints:                                        │    │
+│  │ POST /api/v2/pricing/market-aware                            │    │
+│  │ POST /api/v2/pricing/ml-estimate                             │    │
+│  │ POST /api/v2/pricing/surge                                   │    │
+│  │ GET  /api/v2/pricing/market-analysis/{service_type}          │    │
+│  │ POST /api/v2/pricing/competitor-compare                      │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+│                                ↓                                     │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │ MARKET DATA COLLECTOR (Future VM)                            │    │
+│  │ • Scrapes competitor pricing (Instago, Helpling, etc.)       │    │
+│  │ • Updates market_median_data tables daily                    │    │
+│  │ • Runs nightly via Celery scheduler                          │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+│                                ↓                                     │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │ ML PRICING ENGINE (Future VM)                                │    │
+│  │ • Analyzes historical pricing data                           │    │
+│  │ • Predicts optimal pricing based on:                         │    │
+│  │   - Time of day / Day of week                                │    │
+│  │   - Provider rating & reviews                                │    │
+│  │   - Service complexity (basic/standard/complex)              │    │
+│  │   - Market demand & competition                              │    │
+│  │ • Updates ML model weekly                                    │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+│                                ↓                                     │
+│                                                                      │
+│  12 Category-Specific Pricing Services (PostgreSQL DBs):             │
+│                                                                      │
+│  ┌─────────────────────┐ ┌────────────────────┐ ┌─────────────────┐  │
+│  │ Cleaning Pricing    │ │ Yard Care Pricing  │ │ Home Renovation │  │
+│  │ Service             │ │ Service            │ │ Pricing Service │  │
+│  │                     │ │                    │ │                 │  │
+│  │ Logic: €/hour based │ │ Logic: €/hour or   │ │ Logic: €/project│  │
+│  │ on area & details   │ │ €/m² depends on    │ │ or €/m² +       │  │
+│  │                     │ │ service type       │ │ materials       │  │
+│  │ PostgreSQL 20 GB    │ │ PostgreSQL 12 GB   │ │ PostgreSQL 18GB │  │
+│  │ 4 CPU cores         │ │ 4 CPU cores        │ │ 4 CPU cores     │  │
+│  │ 1 read replica      │ │ 1 read replica     │ │ 1 read replica  │  │
+│  └─────────────────────┘ └────────────────────┘ └─────────────────┘  │
+│                                                                      │
+│  ┌─────────────────────┐ ┌────────────────────┐ ┌─────────────────┐  │
+│  │ Electrical Pricing  │ │ Maintenance Pricing│ │ Moving Services │  │
+│  │ Service             │ │ Service            │ │ Pricing Service │  │
+│  │                     │ │                    │ │                 │  │
+│  │ €/hour + parts      │ │ €/hour (complexity)│ │ €/km + €/hour   │  │
+│  │                     │ │                    │ │ (by volume)     │  │
+│  │ PostgreSQL 15 GB    │ │ PostgreSQL 12 GB   │ │ PostgreSQL 10GB │  │
+│  │ 4 CPU cores         │ │ 4 CPU cores        │ │ 2 CPU cores     │  │
+│  │ 1 read replica      │ │ 1 read replica     │ │ 1 read replica  │  │
+│  └─────────────────────┘ └────────────────────┘ └─────────────────┘  │
+│                                                                      │
+│  ┌─────────────────────┐ ┌────────────────────┐ ┌─────────────────┐  │
+│  │ Family Assistance   │ │ Chef Services      │ │ Wellness        │  │
+│  │ Pricing Service     │ │ Pricing Service    │ │ Pricing Service │  │
+│  │                     │ │                    │ │                 │  │
+│  │ €/hour per person   │ │ €/hour + food      │ │ €/session or    │  │
+│  │                     │ │ costs              │ │ €/month         │  │
+│  │ PostgreSQL 8 GB     │ │ PostgreSQL 10 GB   │ │ PostgreSQL 8 GB │  │
+│  │ 2 CPU cores         │ │ 2 CPU cores        │ │ 2 CPU cores     │  │
+│  │ 0 replicas          │ │ 1 read replica     │ │ 0 replicas      │  │
+│  └─────────────────────┘ └────────────────────┘ └─────────────────┘  │
+│                                                                      │
+│  ┌─────────────────────┐ ┌────────────────────┐ ┌─────────────────┐  │
+│  │ IT Support Pricing  │ │ Events & Parties   │ │ Pet Care        │  │
+│  │ Service             │ │ Pricing Service    │ │ Pricing Service │  │
+│  │                     │ │                    │ │                 │  │
+│  │ €/hour + call fee   │ │ €/service +        │ │ €/hour + pet    │  │
+│  │                     │ │ €/hour (staff)     │ │ supplies        │  │
+│  │ PostgreSQL 8 GB     │ │ PostgreSQL 10 GB   │ │ PostgreSQL 8 GB │  │
+│  │ 2 CPU cores         │ │ 2 CPU cores        │ │ 2 CPU cores     │  │
+│  │ 0 replicas          │ │ 0 replicas         │ │ 0 replicas      │  │
+│  └─────────────────────┘ └────────────────────┘ └─────────────────┘  │
+│                                                                      │
+│  Phase 2 Total: 12 separate PostgreSQL databases = 139 GB            │
+│  Phase 2 Total VMs: 15+ additional services                          │
+│  Phase 2 Timeline: 4-6 months after MVP launch                       │
+│  Phase 2 Build Time: ~15,000+ lines of code                          │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                     IMPLEMENTATION PHASES                            │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  MVP PHASE (Launch - Now)                                            │
+│  ├── Single Pricing Service (MySQL, 20 GB)                           │
+│  ├── Static pricing config for all 12 categories                     │
+│  ├── Postal code surcharges                                          │
+│  ├── Area-based multipliers                                          │
+│  ├── Redis caching (5-min TTL)                                       │
+│  ├── Build Time: 2-3 weeks                                           │
+│  ├── Code Size: ~1,500 lines                                         │
+│  └── Deploy: VM-12 (Pricing Service)                                 │
+│                                                                      │
+│  PHASE 2 (Months 6-9)                                                │
+│  ├── Market Data Collector Service                                   │
+│  ├── ML Pricing Engine                                               │
+│  ├── 12 Category-Specific Pricing Services                           │
+│  ├── Surge pricing (demand-based)                                    │
+│  ├── Provider-specific pricing overrides                             │
+│  ├── Build Time: 4-6 months                                          │
+│  ├── Code Size: ~15,000+ lines                                       │
+│  ├── Deploy: 15+ new VMs                                             │
+│  └── Migration: Zero breaking changes (API-compatible )              │
+│                                                                      │
+│  KEY FEATURES:                                                       │
+│  ✅ MVP simple → Phase 2 scalable                                    │
+│  ✅ No API breaking changes                                          │
+│  ✅ Gradual migration path                                           │
+│  ✅ Fallback to static pricing always available                      │
+│  ✅ Placeholder tables built into MVP schema                         │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                  COMPARISON: MVP vs PHASE 2                         │
+├─────────────────────────────────────┬──────────────┬────────────────┤
+│ Aspect                              │ MVP          │ Phase 2        │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Services                            │ 1 unified    │ 12 specialized │
+│                                     │ Pricing Svc  │ + 2 infra      │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Databases                           │ 1 MySQL      │ 12 PostgreSQL  │
+│                                     │ (20 GB)      │ (139 GB)       │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ CPU Cores                           │ 2 cores      │ 40+ cores      │
+│                                     │ (lightweight)│ (category-spec)│
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Build Time                          │ 2-3 weeks    │ 4-6 months     │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Code Size                           │ ~1,500 lines │ ~15,000+ lines │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Price Types                         │ Static       │ Market-aware + │
+│                                     │ config       │ ML + surge     │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Market Data                         │ None         │ Daily scraping │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ ML Optimization                     │ None         │ Full ML engine │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Surge Pricing                       │ None         │ Real-time      │
+│                                     │              │ demand         │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Launch Cost                         │ Low (~€500)  │ High (~€5,000) │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ Maintenance                         │ Simple (1)   │ Complex (3-4)  │
+│                                     │ team         │ teams          │
+├─────────────────────────────────────┼──────────────┼────────────────┤
+│ API Breaking Changes                │ No           │ No             │
+│                                     │              │ (v2 only)      │
+└─────────────────────────────────────┴──────────────┴────────────────┘

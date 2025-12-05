@@ -1,0 +1,851 @@
+JOBZY PLATFORM ARCHITECTURE
+════════════════════════════════════════════════════════════════
+
+FRONTEND & GATEWAY LAYER
+├── PWA Frontend: Next.js
+│   ├── Type: Headless, Web + Mobile responsive
+│   ├── Deployment: Google Cloud Run
+│   ├── Status: ⭐ YOU BUILD & MAINTAIN
+│   └── Purpose: User-facing interface (customers + providers)
+│
+└── API Gateway: Kong
+    ├── Type: API routing, rate limiting, JWT validation
+    ├── Deployment: GKE (Kubernetes)
+    ├── Status: Pre-built platform (community maintained)
+    ├── All Traffic Routes Through: Kong (100% of requests)
+    └── Features:
+        ├── Request routing (600+ routes)
+        ├── Rate limiting & throttling
+        ├── JWT validation with Keycloak
+        ├── Request/response logging
+        ├── mTLS encryption (via Linkerd)
+        ├── Plugin system (auth, logging, CORS)
+        └── Load balancing (2-3 Kong instances)
+
+AUTHENTICATION & IDENTITY LAYER
+└── Keycloak: Authentication & Identity Management
+    ├── Type: Open-source IAM & OAuth2/OIDC provider
+    ├── Deployment: GKE (Kubernetes, clustered)
+    ├── Status: Pre-built platform (community maintained)
+    ├── Database: Cloud SQL PostgreSQL (5 GB)
+    ├── High Availability: 2+ clustered instances
+    ├── Features:
+    │   ├── Magic Links (passwordless login)
+    │   ├── Social OAuth (Google, Facebook, Apple)
+    │   ├── SMS verification via Twilio integration
+    │   ├── JWT token generation & validation
+    │   ├── Session management (Redis-backed)
+    │   ├── OIDC endpoint for federated identity
+    │   ├── User roles & permissions
+    │   ├── Realm management (multi-tenant ready)
+    │   └── Account linking (multiple auth methods per user)
+
+CORE BUSINESS MICROSERVICES LAYER
+│
+├── EasyAppointments: Booking & Calendar Management
+│   ├── Type: Pre-built appointment scheduling platform
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Pre-built platform (vendor maintained)
+│   ├── Database: Cloud SQL MySQL (500 GB - largest)
+│   ├── CPU Allocation: 16 cores (highest traffic)
+│   ├── Read Replicas: 3 (extreme calendar query load)
+│   ├── Purpose: Calendar, scheduling, time slots
+│   └── Features:
+│       ├── Appointment scheduling & booking
+│       ├── Calendar management & sync
+│       ├── Time slot availability tracking
+│       ├── Automated reminders (SMS + email)
+│       ├── Provider availability management
+│       ├── Service definitions
+│       ├── Customer filtering & search
+│       └── Real-time slot availability updates
+│
+├── Custom Booking Service: Job Workflow Orchestration ⭐ YOU BUILD THIS
+│   ├── Type: Custom microservice
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: ⭐ YOU BUILD & MAINTAIN
+│   ├── Database: Cloud SQL MySQL (100 GB)
+│   ├── CPU Allocation: 4 cores (orchestration layer)
+│   ├── Read Replicas: 1 (read-heavy matching queries)
+│   ├── Purpose: Job request workflow, provider matching
+│   ├── Code Size: ~2,000 lines (core service)
+│   └── Features:
+│       ├── Job request workflow management
+│       ├── Provider matching algorithm (AI/scoring)
+│       ├── Booking status tracking (requested → completed)
+│       ├── Provider acceptance/rejection handling
+│       ├── Job negotiations & chat integration
+│       ├── Integration event orchestration
+│       ├── Status history & audit trail
+│       ├── Booking-to-EasyAppointments sync
+│       └── Cross-service ID mapping
+│
+├── SuiteCRM: Customer Relationship Management
+│   ├── Type: Pre-built CRM platform
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Pre-built platform (community maintained)
+│   ├── Database: Cloud SQL MySQL (300 GB)
+│   ├── CPU Allocation: 8 cores (reporting queries)
+│   ├── Read Replicas: 1 (analytics queries)
+│   ├── Purpose: Customer & provider profiles, interaction history
+│   └── Features:
+│       ├── Customer profiles & account management
+│       ├── Provider profiles & performance tracking
+│       ├── Interaction history & communication logs
+│       ├── Lead management & sales pipeline
+│       ├── Custom fields for service-specific data
+│       ├── Activity tracking (calls, emails, meetings)
+│       ├── Reporting & analytics
+│       ├── Data correlation hub (master record)
+│       └── Integration with Keycloak (user sync)
+│
+├── Chatwoot: Chat & Support Communication
+│   ├── Type: Pre-built omni-channel support platform
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Pre-built platform (community maintained)
+│   ├── Database: Cloud SQL PostgreSQL (200 GB)
+│   ├── CPU Allocation: 4 cores (real-time chat)
+│   ├── Read Replicas: 1 (message history queries)
+│   ├── Purpose: Customer-Provider communication, support
+│   └── Features:
+│       ├── Customer-Provider real-time chat
+│       ├── Support ticket management
+│       ├── Omni-channel messaging (email, SMS, social)
+│       ├── Agent assignment & routing
+│       ├── Message history & search
+│       ├── Chat customization & branding
+│       ├── WebSocket for real-time updates
+│       ├── Conversation canned responses
+│       └── Chat transcript exports
+│
+├── Astuto: Customer Reviews & Feedback System
+│   ├── Type: Pre-built reviews & ratings platform
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Pre-built platform (community maintained)
+│   ├── Database: Cloud SQL PostgreSQL (150 GB)
+│   ├── CPU Allocation: 4 cores (review queries)
+│   ├── Read Replicas: 1 (review browsing)
+│   ├── Purpose: Ratings, reviews, trust scores
+│   └── Features:
+│       ├── Customer feedback & reviews
+│       ├── Provider ratings & scoring
+│       ├── Review management & moderation
+│       ├── Trust score calculation
+│       ├── Review voting (helpful/not helpful)
+│       ├── Category-specific reviews
+│       ├── Review photos/attachments
+│       ├── Correlation with booking IDs
+│       └── Aggregated provider metrics
+│
+├── Strapi: Headless CMS Content Management
+│   ├── Type: Pre-built headless CMS
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Pre-built platform (vendor maintained)
+│   ├── Database: Cloud SQL PostgreSQL (50 GB)
+│   ├── CPU Allocation: 2 cores (content reads cached)
+│   ├── Read Replicas: 0 (CDN-backed)
+│   ├── Purpose: Service descriptions, content, media
+│   └── Features:
+│       ├── Service category descriptions
+│       ├── Provider profile banners & bios
+│       ├── FAQ & help articles
+│       ├── Blog content management
+│       ├── Media library (images, videos)
+│       ├── Content versioning & drafts
+│       ├── Localization support (multi-language)
+│       ├── GraphQL + REST APIs
+│       ├── CDN integration (global delivery)
+│       └── Asset optimization
+│
+├── Novu: Notifications Engine (Multi-Channel)
+│   ├── Type: Pre-built notification orchestration platform
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Pre-built platform (vendor maintained)
+│   ├── Database: Cloud SQL PostgreSQL (100 GB)
+│   ├── CPU Allocation: 2 cores (dispatch)
+│   ├── Read Replicas: 1 (notification history)
+│   ├── Purpose: Email, SMS, push, in-app notifications
+│   └── Features:
+│       ├── Email notifications (SendGrid/SMTP)
+│       ├── SMS notifications via Twilio
+│       ├── Push notifications (web + mobile)
+│       ├── In-app message center
+│       ├── Multi-channel workflows
+│       ├── Notification templates
+│       ├── User preferences & do-not-disturb
+│       ├── Digest email aggregation
+│       ├── Notification history & tracking
+│       └── Delivery status webhooks
+│
+├── Custom Payment Service: Payment Processing & Invoicing ⭐ YOU BUILD THIS
+│   ├── Type: Custom microservice (CRITICAL PATH)
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: ⭐ YOU BUILD & MAINTAIN
+│   ├── Database: Cloud SQL MySQL (400 GB - 2nd largest)
+│   ├── CPU Allocation: 12 cores (payment throughput)
+│   ├── Replication: Master-Master HA (zero downtime)
+│   ├── Backup: Hourly incremental (critical path)
+│   ├── Purpose: Stripe integration, payments, invoicing
+│   ├── Code Size: ~2,000 lines (core payment logic)
+│   └── Features:
+│       ├── Stripe API integration
+│       ├── Payment orchestration & state machine
+│       ├── Webhook handling (payment events)
+│       ├── Invoice generation & PDF export
+│       ├── Receipt creation & distribution
+│       ├── Kotitalousvähennys reporting (Finnish tax)
+│       ├── Refund processing
+│       ├── Payment history & reconciliation
+│       ├── Transaction logging (PCI compliance)
+│       ├── Revenue reporting & analytics
+│       ├── Multi-currency support (EUR)
+│       └── Idempotency keys (duplicate prevention)
+│
+├── Custom Pricing Service MVP: Dynamic Pricing (Phase 1) ⭐ YOU BUILD THIS
+│   ├── Type: Custom microservice (MVP phase)
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: ⭐ YOU BUILD & MAINTAIN
+│   ├── Database: Cloud SQL MySQL (20 GB)
+│   ├── CPU Allocation: 2 cores (Redis-cached)
+│   ├── Replication: None (MVP lightweight)
+│   ├── Purpose: Price calculation & rate management
+│   ├── Code Size: ~1,500 lines (MVP static pricing)
+│   └── MVP Features (Current Phase):
+│       ├── Static pricing configuration
+│       ├── Service type rates (hourly/per_m2/per_project)
+│       ├── Postal code-based surcharges (1.0x to 1.5x)
+│       ├── Area multipliers (city 1.2x, suburbs 1.0x, rural 0.8x)
+│       ├── Urgency level pricing (same-day, next-day, planned)
+│       ├── Minimum charge enforcement
+│       ├── Price calculation API endpoint
+│       ├── Redis caching (24-hour TTL, 95% hit rate)
+│       ├── Admin panel for rate updates
+│       └── Audit trail for price changes
+│   │
+│   └── Phase 2 Roadmap (Future - Months 6-9):
+│       ├── Market data collector service (competitor scraping)
+│       ├── ML-based pricing intelligence engine
+│       ├── Surge pricing based on demand
+│       ├── Category-specific pricing (12 services)
+│       ├── A/B testing framework
+│       ├── Dynamic rate adjustment algorithms
+│       └── Predictive pricing models
+│
+└── Custom Correlation/Reference DB: Cross-Service ID Mapping ⭐ YOU BUILD THIS
+    ├── Type: Custom microservice (data service)
+    ├── Deployment: GKE (Kubernetes)
+    ├── Status: ⭐ YOU BUILD & MAINTAIN
+    ├── Database: Cloud SQL MySQL (50 GB)
+    ├── CPU Allocation: 2 cores (lightweight)
+    ├── Read Replicas: 1 (ID lookups)
+    ├── Purpose: Cross-service entity mapping, audit trail
+    ├── Code Size: ~1,000 lines (simple mapping service)
+    └── Features:
+        ├── Customer ID mapping
+        │   └─ keycloak_id ↔ suitecrm_id ↔ easyappointments_id
+        ├── Provider ID mapping
+        │   └─ keycloak_id ↔ suitecrm_id ↔ easyappointments_id
+        ├── Booking ID mapping
+        │   └─ booking_service_id ↔ easyappointments_id ↔ external_refs
+        ├── Review ID mapping
+        │   └─ booking_id ↔ astuto_review_id ↔ suitecrm_activity_id
+        ├── Payment ID mapping
+        │   └─ booking_id ↔ stripe_payment_intent_id ↔ invoice_id
+        ├── Job Request mapping
+        │   └─ booking_id ↔ custom_booking_service_id ↔ external_refs
+        ├── Event logs (audit trail)
+        │   ├─ timestamp, service, action, entity_type, entity_ids
+        │   ├─ Used for debugging cross-service sync issues
+        │   └─ Retention: 1 year
+        ├── API endpoints for lookups
+        ├── Batch mapping operations
+        └── Webhook integration (cross-service event sync)
+
+════════════════════════════════════════════════════════════════
+
+INFRASTRUCTURE & SUPPORT SERVICES LAYER
+│
+├── Redis: Caching & Message Broker
+│   ├── Type: In-memory data store (Memorystore - managed)
+│   ├── Deployment: GCP Memorystore
+│   ├── Status: Pre-built platform (Google managed)
+│   ├── Configuration: 64 GB HA cluster (3 nodes, sharded)
+│   ├── High Availability: Automatic failover
+│   ├── Purpose: Cache layer, session store, Celery broker
+│   └── Features:
+│       ├── Application cache (95% hit rate target)
+│       ├── Session storage (all services)
+│       ├── Celery job queue storage
+│       ├── Pricing calculation cache (24h TTL)
+│       ├── Rate limiting counters (1m TTL)
+│       ├── Real-time data streams
+│       ├── Pub/Sub messaging
+│       └── Automatic persistence (RDB + AOF)
+│
+├── Celery + RabbitMQ: Background Job Queue & Task Scheduling
+│   ├── Type: Distributed task queue (OSS)
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Infrastructure/OSS (you monitor)
+│   ├── Message Broker: RabbitMQ (1 instance in GKE)
+│   ├── Job Persistence: Redis (not local disk)
+│   ├── Workers: 5-10 Celery worker processes
+│   ├── Purpose: Async jobs, scheduled tasks, background work
+│   └── Job Queues:
+│       ├── Reports queue
+│       │   ├─ Invoice generation
+│       │   ├─ Receipt PDF creation
+│       │   └─ CSV exports
+│       ├── Emails queue
+│       │   ├─ Digest emails (daily/weekly)
+│       │   ├─ Notification sending
+│       │   └─ Welcome emails
+│       ├── Sync queue
+│       │   ├─ Cross-service data synchronization
+│       │   ├─ Booking ↔ EasyAppointments sync
+│       │   └─ Customer profile updates
+│       ├── Cleanup queue
+│       │   ├─ Temporary file cleanup
+│       │   ├─ Cache invalidation
+│       │   └─ Expired session removal
+│       ├── Analytics queue
+│       │   ├─ Data pipeline aggregations
+│       │   ├─ User behavior tracking
+│       │   └─ Revenue calculations
+│       └── Job Retry Strategy:
+│           ├─ Failed jobs: Retry 3 times (exponential backoff)
+│           ├─ Max runtime: 30 minutes (hard timeout)
+│           ├─ Dead letter queue: Permanently failed jobs
+│           └─ Retry delays: 1m → 5m → 15m
+│
+├── MinIO: Object/File Storage (S3-Compatible)
+│   ├── Type: S3-compatible object storage
+│   ├── Deployment: GKE (Kubernetes) - Multi-node cluster
+│   ├── Status: Pre-built platform (community maintained)
+│   ├── Size: 1-5 TB (auto-scales)
+│   ├── Purpose: File storage, backups, archives
+│   └── Features:
+│       ├── Provider profile pictures
+│       ├── Service category photos
+│       ├── Invoice PDFs
+│       ├── Receipt documents
+│       ├── Proof of work images
+│       ├── Customer documents
+│       ├── Backup archives
+│       ├── Contract files
+│       ├── Audio/video content
+│       ├── S3 API compatibility
+│       ├── Versioning & lifecycle policies
+│       ├── Multi-node setup (HA)
+│       ├── Automatic replication
+│       └── Cross-region backup (optional)
+│
+└── Linkerd: Service Mesh
+    ├── Type: Service mesh & mTLS provider
+    ├── Deployment: GKE (Kubernetes add-on)
+    ├── Status: Pre-built platform (community maintained)
+    ├── Purpose: Service-to-service encryption, load balancing
+    └── Features:
+        ├── Automatic mTLS (certificate management)
+        ├── Service-to-service encryption
+        ├── Intelligent load balancing
+        ├── Automatic retries (transient failures)
+        ├── Circuit breaking (failing services)
+        ├── Rate limiting (per-route)
+        ├── Distributed tracing integration
+        ├── Service metrics collection
+        ├── Live traffic (UI for visualization)
+        └── Multi-cluster support (ready)
+
+════════════════════════════════════════════════════════════════
+
+OBSERVABILITY & MONITORING LAYER
+│
+├── ELK Stack: Centralized Logging
+│   ├── Type: Log aggregation & search (OSS)
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Infrastructure/OSS (you maintain)
+│   ├── Components:
+│   │   ├── Elasticsearch: 3-node cluster, 120 GB logs
+│   │   ├── Logstash: Log processing & enrichment
+│   │   └── Kibana: Web UI for searching & visualization
+│   ├── Log Retention: 30 days (hot/warm/cold tiering)
+│   ├── Purpose: Application logs, debugging, auditing
+│   └── Features:
+│       ├── Application stdout/stderr logs
+│       ├── Structured logging (JSON)
+│       ├── Full-text search (< 500ms queries)
+│       ├── Log aggregations & analytics
+│       ├── Custom dashboards & alerts
+│       ├── Security audit logs
+│       ├── Access logs (Kong, Keycloak)
+│       ├── Error tracking & root cause analysis
+│       ├── Performance logging
+│       └── Integration with Jaeger (trace context)
+│
+├── Prometheus + Grafana: Metrics Collection & Visualization
+│   ├── Type: Metrics & alerting (OSS)
+│   ├── Deployment: GKE (Kubernetes)
+│   ├── Status: Infrastructure/OSS (you maintain)
+│   ├── Components:
+│   │   ├── Prometheus: Time-series database, in-memory
+│   │   └── Grafana: Dashboard & alerting UI
+│   ├── Scrape Interval: 15 seconds (all services)
+│   ├── Retention: 15 days (disk-backed)
+│   ├── Purpose: Service metrics, performance, health
+│   └── Features:
+│       ├── Metrics Collection:
+│       │   ├─ HTTP request duration (all endpoints)
+│       │   ├─ Database query latency (all databases)
+│       │   ├─ Cache hit/miss rates
+│       │   ├─ Queue depth (pending jobs)
+│       │   ├─ Error rates (4xx, 5xx)
+│       │   ├─ CPU/memory usage (services)
+│       │   ├─ Disk I/O & latency
+│       │   └─ Custom business metrics
+│       ├── Dashboards (20+ pre-built):
+│       │   ├─ Service overview
+│       │   ├─ Database performance
+│       │   ├─ API gateway metrics
+│       │   ├─ Queue status
+│       │   ├─ Pricing service (cache hit rate)
+│       │   ├─ Payment service (throughput)
+│       │   └─ Infrastructure health
+│       ├── Alert Rules (all critical):
+│       │   ├─ CPU > 70%: Scale or optimize
+│       │   ├─ Memory > 80%: Growth warning
+│       │   ├─ Error rate > 5%: Investigate
+│       │   ├─ Queue depth > 1000: Processing delay
+│       │   ├─ Payment latency > 100ms: Investigate
+│       │   ├─ Auth failure rate spike: Security check
+│       │   └─ Database replication lag > 5s: Check replica
+│       ├── Notification channels:
+│       │   ├─ Slack (all alerts)
+│       │   ├─ PagerDuty (critical only)
+│       │   ├─ Email (summaries)
+│       │   └─ SMS (critical incidents)
+│       └── SLA Monitoring:
+│           ├─ 99.9% uptime tracking
+│           ├─ Response time SLOs
+│           └── Error budget tracking
+│
+└── Jaeger: Distributed Tracing
+    ├── Type: Distributed tracing (OSS)
+    ├── Deployment: GKE (Kubernetes)
+    ├── Status: Infrastructure/OSS (you maintain)
+    ├── Backend: Elasticsearch (50 GB storage)
+    ├── Purpose: End-to-end request tracking, debugging
+    └── Features:
+        ├── End-to-end request tracing (all services)
+        ├── Latency analysis & visualization
+        ├── Service dependency mapping
+        ├── Performance bottleneck detection
+        ├── Correlation with logs (trace context)
+        ├── Drill-down to individual requests
+        ├── Service-to-service call tracking
+        ├── Error tracking with full trace
+        ├── Multi-service transaction visualization
+        └── Tail-based sampling (critical traces)
+
+════════════════════════════════════════════════════════════════
+
+ANALYTICS LAYER
+│
+└── Matomo & Google Analytics 4 (GA4)
+    ├── Type: User analytics platforms
+    ├── Deployment: Self-hosted Matomo + SaaS GA4
+    ├── Status: Pre-built platforms (some managed)
+    ├── Purpose: User behavior, conversion tracking, insights
+    ├── Matomo (Privacy-first):
+    │   ├─ User behavior tracking
+    │   ├─ Session tracking
+    │   ├─ Conversion funnels
+    │   ├─ Goal tracking
+    │   ├─ Custom dimensions
+    │   ├─ Privacy-first (no 3rd party tracking)
+    │   ├─ Self-hosted (full data control)
+    │   └─ GDPR compliant
+    └── GA4 (Google Analytics):
+        ├─ Advanced analytics
+        ├─ ML-powered insights
+        ├─ Cross-device tracking
+        ├─ Audience segmentation
+        ├─ Custom reporting
+        ├─ Real-time monitoring
+        ├─ Integration with Google Ads
+        └─ SaaS (Google managed)
+
+════════════════════════════════════════════════════════════════
+
+EXTERNAL SERVICES (SaaS - No Maintenance) LAYER
+│
+├── Stripe: Payment Processing Gateway
+│   ├── Type: SaaS payment processor
+│   ├── Deployment: External (no deployment)
+│   ├── Status: SaaS only (Google manages)
+│   ├── Purpose: Process customer payments
+│   └── Features:
+│       ├── Payment processing (cards, wallets)
+│       ├── Card tokenization (PCI compliance)
+│       ├── PCI Level 1 compliance
+│       ├── Webhook notifications (payment events)
+│       ├── Refund processing
+│       ├── Multi-currency support (EUR)
+│       ├── Fraud detection
+│       ├── Settlement & reporting
+│       └── Dashboard analytics
+│
+└── Twilio: SMS Communication
+    ├── Type: SaaS SMS provider
+    ├── Deployment: External (no deployment)
+    ├── Status: SaaS only (Twilio manages)
+    ├── Purpose: SMS verification & notifications
+    └── Features:
+        ├── SMS verification codes (auth)
+        ├── SMS notifications (Novu integration)
+        ├── Phone number validation
+        ├── SMS delivery tracking
+        ├── International support
+        ├── Webhook callbacks
+        ├── API rate limits
+        └── Usage-based billing
+
+════════════════════════════════════════════════════════════════
+
+COMPREHENSIVE SERVICE SUMMARY
+════════════════════════════════════════════════════════════════
+
+BY OWNERSHIP & MAINTENANCE:
+
+⭐ Custom Microservices YOU BUILD & MAINTAIN: 4 services
+├── 1. Booking Service (job orchestration)
+│   ├─ ~2,000 LOC
+│   ├─ Business Logic: Matching algorithm, status tracking
+│   ├─ Database: MySQL 100 GB
+│   ├─ Criticality: 🔴 Critical Path
+│   └─ Team: Core team (2-3 developers)
+│
+├── 2. Payment Service (Stripe integration)
+│   ├─ ~2,000 LOC
+│   ├─ Business Logic: Payments, invoices, tax reporting
+│   ├─ Database: MySQL 400 GB (Master-Master HA)
+│   ├─ Criticality: 🔴 Critical Path
+│   └─ Team: Senior backend developer (payments expertise)
+│
+├── 3. Pricing Service MVP (rate calculation)
+│   ├─ ~1,500 LOC (MVP only, Phase 2 expands)
+│   ├─ Business Logic: Static pricing, area multipliers
+│   ├─ Database: MySQL 20 GB
+│   ├─ Criticality: 🟡 Important
+│   └─ Team: Backend developer or product team
+│
+└── 4. Correlation DB (ID mapping)
+    ├─ ~1,000 LOC
+    ├─ Business Logic: Cross-service mappings, audit trail
+    ├─ Database: MySQL 50 GB
+    ├─ Criticality: 🟡 Important
+    └─ Team: Infrastructure or data team
+
+Pre-Built Platforms (Community/Vendor Maintained): 10 services
+├── 1. EasyAppointments (calendar)
+├── 2. SuiteCRM (CRM)
+├── 3. Chatwoot (support)
+├── 4. Astuto (reviews)
+├── 5. Strapi (CMS)
+├── 6. Novu (notifications)
+├── 7. Keycloak (auth)
+├── 8. Kong (API gateway)
+├── 9. Linkerd (service mesh)
+└── 10. MinIO (storage)
+
+Infrastructure/OSS Services (You Monitor): 6 services
+├── 1. Redis (caching)
+├── 2. Celery + RabbitMQ (job queue)
+├── 3. ELK Stack (logging)
+├── 4. Prometheus + Grafana (metrics)
+├── 5. Jaeger (tracing)
+└── 6. Elasticsearch (backend)
+
+External SaaS (No Maintenance): 2 services
+├── 1. Stripe (payments)
+└── 2. Twilio (SMS)
+
+Analytics Platforms: 1 service
+└── 1. Matomo & GA4
+
+TOTAL: 23 microservices + 1 frontend
+
+════════════════════════════════════════════════════════════════
+
+BY CRITICALITY LEVEL:
+
+🔴 CRITICAL PATH (HA/Replicas Required):
+├── Kong API Gateway
+│   ├─ All 100% of requests pass through
+│   ├─ Replicas: 2-3 instances (load balanced)
+│   └─ Failover: < 10 seconds
+├── Keycloak (Authentication)
+│   ├─ Required for user login
+│   ├─ Replicas: 2 instances (clustered)
+│   └─ Session backup: Redis
+├── Custom Payment Service ⭐
+│   ├─ Financial operations (critical)
+│   ├─ Replication: Master-Master (zero downtime)
+│   └─ Backup: Hourly incremental
+└── Custom Booking Service ⭐
+    ├─ Core business logic
+    ├─ Replicas: 1 read replica
+    └─ Backup: Hourly incremental
+
+🟡 IMPORTANT (Replicas Recommended):
+├── EasyAppointments
+│   ├─ Replicas: 3 (extreme read traffic)
+│   └─ Backup: Hourly
+├── SuiteCRM
+│   ├─ Replicas: 1 (analytics offload)
+│   └─ Backup: Daily
+├── Custom Pricing Service ⭐
+│   ├─ Replicas: 0 (Redis caches)
+│   └─ Backup: Daily
+└── Correlation DB ⭐
+    ├─ Replicas: 1 (ID mapping)
+    └─ Backup: Daily
+
+🟢 SUPPORTING (Standard Setup):
+├── Chatwoot (1 replica)
+├── Astuto (1 replica)
+├── Strapi (0 replicas, CDN)
+├── Novu (1 replica)
+├── Redis (HA cluster)
+├── Celery/RabbitMQ
+├── MinIO (multi-node)
+├── Observability stack
+├── Analytics
+├── Stripe (SaaS)
+└── Twilio (SaaS)
+
+════════════════════════════════════════════════════════════════
+
+BY RESPONSIBILITY DOMAIN:
+
+USER-FACING FEATURES (Customers & Providers See):
+├── Next.js Frontend ⭐
+├── EasyAppointments (Calendar UI)
+├── Custom Booking Service (Job workflow) ⭐
+├── SuiteCRM (Profile views)
+├── Strapi (Content display)
+├── Chatwoot (Chat widget)
+├── Astuto (Reviews display)
+└── Novu (Notification display)
+
+FINANCIAL OPERATIONS (Money Handling):
+├── Custom Payment Service (Core) ⭐
+├── Stripe (Payment processing)
+└── Custom Pricing Service (Rate calculation) ⭐
+
+AUTHENTICATION & SECURITY:
+├── Keycloak (User auth & identity)
+├── Twilio (SMS verification)
+└── Linkerd (Service-to-service encryption)
+
+DATA & PERSISTENCE:
+├── SuiteCRM (Customer data)
+├── EasyAppointments (Booking data)
+├── Strapi (Content data)
+├── MinIO (File storage)
+├── Custom Correlation DB (Mappings) ⭐
+└── All databases (state management)
+
+BACKGROUND PROCESSING:
+├── Celery + RabbitMQ (Task queue)
+├── Novu (Async notifications)
+└── Analytics pipeline
+
+OBSERVABILITY & INSIGHTS:
+├── ELK Stack (Logs)
+├── Prometheus + Grafana (Metrics)
+├── Jaeger (Tracing)
+├── Matomo & GA4 (User analytics)
+└── Kong logging (API traffic)
+
+API ORCHESTRATION:
+├── Kong (Request routing)
+└── Linkerd (Service mesh)
+
+════════════════════════════════════════════════════════════════
+
+PHASE 2 ROADMAP (Months 6-9 Future Expansion)
+
+PRICING SERVICE EXPANSION (from 1 to 15+ services):
+
+When you implement dynamic pricing with market intelligence:
+
+New Services to Build (YOU BUILD THESE):
+├── 1. Market Data Collector Service ⭐
+│   ├─ Scrapes competitor prices daily
+│   ├─ Data pipeline to pricing DB
+│   └─ Scheduled job (Celery)
+├── 2. ML Pricing Intelligence Engine ⭐
+│   ├─ Trains on historical data
+│   ├─ Predicts demand
+│   └─ Recommends pricing
+├── 3. Surge Pricing Service ⭐
+│   ├─ Real-time demand calculation
+│   ├─ Dynamic rate adjustment
+│   └─ A/B testing framework
+└── 4. Pricing Coordinator Service ⭐
+    ├─ Orchestrates 12 category services
+    ├─ Rate update rollout
+    └─ Version management
+
+Category-Specific Pricing (12 separate services):
+├── 1. Cleaning Pricing Service
+├── 2. Yard Care Pricing Service
+├── 3. Home Renovation Pricing Service
+├── 4. Electrical Work Pricing Service
+├── 5. Maintenance Pricing Service
+├── 6. Moving Pricing Service
+├── 7. Family Assistance Pricing Service
+├── 8. Chef/Catering Pricing Service
+├── 9. Wellness/Massage Pricing Service
+├── 10. IT Support Pricing Service
+├── 11. Events/DJ Pricing Service
+└── 12. Pet Care Pricing Service
+
+Phase 2 Features:
+├── Market median pricing automation
+├── ML-based pricing models
+├── Surge pricing (demand-based)
+├── Category-specific rules
+├── A/B testing framework
+└── Zero API breaking changes (v2 endpoints)
+
+Migration Strategy:
+├── Launch /api/v2/pricing endpoints
+├── Keep /api/v1/pricing working (backward compat)
+├── Gradual rollout per category
+├── Monitoring & performance tuning
+├── Customer feedback loop
+└── Optional: Kill /api/v1 after 6 months
+
+Database Expansion (Phase 2):
+├── Total databases: 11 → ~26 (add 15 pricing DBs)
+├── Total storage: 1.9 TB → ~3.3 TB
+├── Pricing services: 1 → 16
+├── Custom services: 4 → 8
+└── Zero downtime migration
+
+════════════════════════════════════════════════════════════════
+
+DEVELOPMENT TEAM STRUCTURE
+
+For Building This System:
+
+Core Team (Full-time):
+├── Backend Lead (2,000+ hrs - Booking Service)
+│   ├─ Node.js/Python expertise
+│   ├─ Microservices architecture
+│   └─ Database design
+├── Payment Systems Engineer (2,000+ hrs - Payment Service)
+│   ├─ Stripe API expertise
+│   ├─ PCI compliance knowledge
+│   └─ Financial reporting
+├── DevOps/Infrastructure (3,000+ hrs)
+│   ├─ GCP, Kubernetes, Terraform
+│   ├─ Database administration
+│   └─ Monitoring & observability
+└── Frontend Developer (3,000+ hrs - Next.js)
+    ├─ React expertise
+    ├─ Mobile responsive design
+    └─ PWA optimization
+
+Supporting Team (Part-time or Contractor):
+├── Product Manager (1,000+ hrs - requirements)
+├── QA/Testing (1,500+ hrs - test coverage)
+├── Data Analyst (800+ hrs - analytics setup)
+└── DevOps Support (1,000+ hrs - monitoring)
+
+Configuration/Setup Team (one-time):
+├── Database Administrator (200 hrs)
+├── Keycloak Admin (100 hrs)
+├── Kong Configuration (150 hrs)
+└── Monitoring Setup (250 hrs)
+
+Total Estimated Implementation Time: ~12,000+ hours
+Parallel Development Possible: 6-9 months with 4-person core team
+
+════════════════════════════════════════════════════════════════
+
+SCALING CHECKLIST
+
+As Services Grow:
+
+Week 1-4 (MVP - Single Node):
+├── Kong: 1 instance
+├── Keycloak: 1 instance (stateless, session in Redis)
+├── Services: 1 instance each
+└── Databases: Single instance (zonal HA)
+
+Month 2-3 (Small Scale - HA):
+├── Kong: 2 instances (load balanced)
+├── Keycloak: 2 instances (clustered)
+├── Critical services: 2 instances
+├── Databases: Read replicas for high-traffic
+└── Redis: HA cluster (automatic)
+
+Month 4-6 (Growth - Full HA):
+├── Kong: 3 instances (canary deployments)
+├── All services: 2+ instances
+├── Critical databases: Master-Master replication
+├── Database read replicas: 3+ for high-traffic
+├── Multi-region ready (prepare for phase 2)
+└── Autoscaling policies: CPU-based
+
+Month 6+ (Scale-Out - Multi-Region):
+├── Multi-region deployment (Kubernetes federation)
+├── Global load balancing
+├── Distributed caching (Redis cluster)
+├── Database sharding (if > 5TB)
+├── Advanced pricing services (phase 2)
+└── 99.99% uptime SLA
+
+════════════════════════════════════════════════════════════════
+
+SUCCESS METRICS
+
+By Month:
+
+Month 1-3 (MVP):
+├── Users: 100-500
+├── Bookings: 10-50/day
+├── System uptime: 99%
+├── Avg response time: 200ms
+├── Error rate: < 1%
+└── Team: 2-3 developers
+
+Month 3-6 (Growth):
+├── Users: 1,000-5,000
+├── Bookings: 100-500/day
+├── System uptime: 99.5%
+├── Avg response time: 150ms
+├── Error rate: < 0.5%
+├── Team: 4-5 developers
+└── New services: 0 (stabilization)
+
+Month 6-12 (Scale):
+├── Users: 5,000-20,000
+├── Bookings: 500-2,000/day
+├── System uptime: 99.9%
+├── Avg response time: 100ms
+├── Error rate: < 0.1%
+├── Team: 6-8 developers
+└── New services: Phase 2 pricing services
+
+Year 1+:
+├── Users: 20,000+
+├── Bookings: 2,000+/day
+├── System uptime: 99.99%
+├── Avg response time: < 50ms
+├── Error rate: < 0.01%
+├── Team: 10+ developers
+├── New markets: Multi-region
+└── Revenue: €100k+/month

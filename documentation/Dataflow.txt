@@ -1,0 +1,20 @@
+Frontend → Kong → EasyAppointments (booking request)
+                    ↓
+              Call Pricing Service API
+                    ↓
+          Pricing Service queries its DB for:
+          • Market median prices
+          • Historical surge data
+          • Vendor surge preferences
+                    ↓
+          Returns: recommended_price, surge_multiplier, breakdown
+                    ↓
+         EasyAppointments displays price to customer
+                    ↓
+              Customer confirms → Booking created
+                    ↓
+              Celery job triggered: market_collector (daily)
+                    ↓
+              Market Collector updates pricing DB
+                    ↓
+              Next booking request gets updated market data
